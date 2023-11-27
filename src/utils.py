@@ -51,7 +51,6 @@ def read_dataset_file(filepath_video_games):
             # read the sections_str literal to a list
             sections = ast.literal_eval(sections_str)
 
-            # put the title and sections in a dictionary
             doc_dict[title] = sections
 
     return doc_dict
@@ -83,7 +82,14 @@ def dict_sections_to_string(doc_dict):
         doc_str = preprocessor.preprocess_text(doc_str)
         doc_dict[title] = doc_str
 
-def writeDictToCSV(dict, columns, filename):
+def write_dict_to_csv(dict, columns, filename):
+    """
+    Write a dictionary to a CSV file.
+    :param dict: dictionary to write
+    :param columns: column names
+    :param filename: file name
+    :return:
+    """
     with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=columns)
         writer.writeheader()
@@ -93,5 +99,13 @@ def writeDictToCSV(dict, columns, filename):
                 row[column] = dict[key]
             writer.writerow(row)
 
-def readDictFromCSV(filename):
-    pass
+
+def read_dict_from_csv(filename, columns):
+    """
+    Read a dictionary from a CSV file.
+    :param filename:
+    :param columns:
+    :return: dictionary
+    """
+    with open(filename, 'r', newline='', encoding='utf-8') as csvfile:
+        return {row[columns[0]]:row[columns[1]] for row in csv.DictReader(csvfile)}
