@@ -113,15 +113,16 @@ def getDocDict(filepath_video_games, csv_doc_dict):
     if os.path.exists(csv_doc_dict):
         # read the dictionary from the csv file into a dataframe
         df = pd.read_csv(csv_doc_dict, encoding='utf-8')
-        # convert the dataframe to a dictionary
-        doc_dict = df.set_index('Title').T.to_dict('list')
+        # convert the dataframe to a dictionary key:str =Title, value:str =Text
+        doc_dict = df.set_index('Title').T.to_dict('records')[0]
         return doc_dict
     else:
         # read the dataset file into a dictionary
         doc_dict = read_dataset_file(filepath_video_games)
         # read the dictionary into a panda dataframe
-        df = pd.DataFrame.from_dict(doc_dict, orient='index', columns=['Text'])
-        # write the dataframe to a csv file
+        # make sure the name of the index column is 'Title' and the name of the second column is 'Text'
+        df = pd.DataFrame.from_dict(doc_dict, orient='index', columns=['Text']).rename_axis("Title", axis=0)
+        # write the dataframe to a csv file with colums 'Title' and 'Text'
         df.to_csv(csv_doc_dict, encoding='utf-8')
         return doc_dict
 
