@@ -90,17 +90,18 @@ def write_dict_to_csv(dict, columns, filename):
     :param filename: file name
     :return:
     """
-    try:
-        with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=columns)
-            writer.writeheader()
-            for key in dict.keys():
-                row = {columns[0]:key}
-                for column in columns[1:]:
-                    row[column] = dict[key]
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=columns)
+        writer.writeheader()
+        for key in dict.keys():
+            row = {columns[0]:key}
+            for column in columns[1:]:
+                row[column] = dict[key]
+            try:
                 writer.writerow(row)
-    except IOError:
-        
+            except:
+                print(row)
+
 
 
 def read_dict_from_csv(filename, columns):
