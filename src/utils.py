@@ -125,6 +125,7 @@ def getDocDict(filepath_video_games, csv_doc_dict):
         df.to_csv(csv_doc_dict, encoding='utf-8')
         return doc_dict
 
+
 def write_dict_to_csv(dict, columns, csvfile):
     """
     Write a dictionary to a CSV file.
@@ -140,7 +141,6 @@ def write_dict_to_csv(dict, columns, csvfile):
         for column in columns[1:]:
             row[column] = dict[key]
             writer.writerow(row)
-
 
 
 def read_dict_from_csv(csvfile, columns):
