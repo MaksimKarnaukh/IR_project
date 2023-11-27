@@ -20,7 +20,7 @@ class SimpleGUI:
 
     def __init__(self, master):
         self.master = master
-        master.title("Simple GUI")
+        master.title("Similar Documents Retrieval System")
 
         # Center the window
         self.center_window()
