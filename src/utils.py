@@ -2,6 +2,7 @@ import csv
 import re
 import sys
 import ast
+from data_preprocessor import DataPreprocessor
 
 
 def read_gt(filename):
@@ -72,10 +73,25 @@ def dict_sections_to_string(doc_dict):
     :param doc_dict:
     :return:
     """
-    # the dictionary consist of key 'title' and value 'sections', where sections is a list of lists, where the inner list has two elements that are strings
-    # convert the sections into one big string
-    doc_str = ''
+    preprocessor = DataPreprocessor()
+    # the dictionary consists of key 'title' and value 'sections', where sections is a list of lists, where the inner list has two elements that are strings
     for title, sections in doc_dict.items():
+        doc_str = ''
         for section in sections:
-            doc_str += section_to_string(section) + '\n'
-    return doc_str
+            doc_str += section_to_string(section)
+
+        doc_str = preprocessor.preprocess_text(doc_str)
+        doc_dict[title] = doc_str
+
+def writeDictToCSV(dict, columns, filename):
+    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=columns)
+        writer.writeheader()
+        for key in dict.keys():
+            row = {columns[0]:key}
+            for column in columns[1:]:
+                row[column] = dict[key]
+            writer.writerow(row)
+
+def readDictFromCSV(filename):
+    pass

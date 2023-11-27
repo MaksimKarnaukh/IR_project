@@ -1,4 +1,3 @@
-from data_preprocessor import DataPreprocessor
 from typing import List
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -7,7 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 class RelatedDocumentsRetrieval:
     def __init__(self, documents):
         self.documents: List[str] = documents
-        self.preprocessor = DataPreprocessor()
+        # self.preprocessor = DataPreprocessor()
         self.vectorizer = TfidfVectorizer()
 
     def preprocess_documents(self):
