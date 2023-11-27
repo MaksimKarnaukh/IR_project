@@ -18,6 +18,30 @@ def read_gt(filename):
     return deserialized_data
 
 
+def section_to_string(section):
+    """
+    Convert a section to a string.
+    :param section: section to convert
+    :return: string representation of the section
+    """
+    big_string = " ".join(section)
+    return big_string
+
+
+def sections_to_string(sections):
+    """
+    Convert a dictionary of sections to a string.
+    :param doc_dict:
+    :return:
+    """
+    preprocessor = DataPreprocessor()
+    doc_str = ''
+    for section in sections:
+        doc_str += section_to_string(section)
+    doc_str = preprocessor.preprocess_text(doc_str)
+    return doc_str
+
+
 def read_dataset_file(filepath_video_games):
     """
     Read the dataset file.
@@ -25,6 +49,7 @@ def read_dataset_file(filepath_video_games):
     :return: dictionary of title and sections.
     """
     doc_dict = {}
+    preprocessor = DataPreprocessor()
 
     # Open the CSV file
     with open(filepath_video_games, 'r', encoding='utf-8') as file:
@@ -55,32 +80,21 @@ def read_dataset_file(filepath_video_games):
 
     return doc_dict
 
-
-def section_to_string(section):
-    """
-    Convert a section to a string.
-    :param section: section to convert
-    :return: string representation of the section
-    """
-    big_string = " ".join(section)
-    return big_string
-
-
-def dict_sections_to_string(doc_dict):
-    """
-    Convert a dictionary of sections to a string.
-    :param doc_dict:
-    :return:
-    """
-    preprocessor = DataPreprocessor()
-    # the dictionary consists of key 'title' and value 'sections', where sections is a list of lists, where the inner list has two elements that are strings
-    for title, sections in doc_dict.items():
-        doc_str = ''
-        for section in sections:
-            doc_str += section_to_string(section)
-
-        doc_str = preprocessor.preprocess_text(doc_str)
-        doc_dict[title] = doc_str
+def getDocDict(filepath_video_games, csv_doc_dict):
+    if os.path.exists(csv_doc_dict):
+        # read the dictionary from the csv file into a dataframe
+        df = pd.read_csv(csv_doc_dict, encoding='utf-8')
+        # convert the dataframe to a dictionary
+        doc_dict = df.set_index('Title').T.to_dict('list')
+        return doc_dict
+    else:
+        # read the dataset file into a dictionary
+        doc_dict = read_dataset_file(filepath_video_games)
+        # read the dictionary into a panda dataframe
+        df = pd.DataFrame.from_dict(doc_dict, orient='index', columns=['Text'])
+        # write the dataframe to a csv file
+        df.to_csv(csv_doc_dict, encoding='utf-8')
+        return doc_dict
 
 def write_dict_to_csv(dict, columns, filename):
     """
@@ -101,7 +115,6 @@ def write_dict_to_csv(dict, columns, filename):
                 writer.writerow(row)
             except:
                 print(row)
-
 
 
 def read_dict_from_csv(filename, columns):
