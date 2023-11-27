@@ -1,9 +1,14 @@
 import csv
+import os
 import re
 import sys
 import ast
+import zipfile
 from data_preprocessor import DataPreprocessor
-
+from alive_progress import alive_it
+import pandas as pd
+import csv
+import gzip
 
 def read_gt(filename):
     """
@@ -55,7 +60,7 @@ def read_dataset_file(filepath_video_games):
     with open(filepath_video_games, 'r', encoding='utf-8') as file:
 
         # Create a CSV reader
-        reader = csv.DictReader(file)
+        reader:csv.DictReader = csv.DictReader(file)
 
         maxInt = sys.maxsize
         while True:
@@ -63,22 +68,46 @@ def read_dataset_file(filepath_video_games):
             # as long as the OverflowError occurs.
             try:
                 csv.field_size_limit(maxInt)
-                print("csv.field_size_limit = ", maxInt)
+                # print("csv.field_size_limit = ", maxInt)
                 break
             except OverflowError:
                 maxInt = int(maxInt / 10)
-
+        # get the number of rows in the CSV file
+        rows = list(reader)
+        nr_rows = len(rows)
+        # print the number of rows
+        # print("Number of rows: ", nr_rows)
         # Iterate over each row in the CSV file
-        for row in reader:
+        for row in alive_it(rows, title='Reading dataset file'):
             title = row['Title']
             sections_str = row['Sections']
 
             # read the sections_str literal to a list
             sections = ast.literal_eval(sections_str)
 
-            doc_dict[title] = sections
+            doc_dict[title] = sections_to_string(sections)
+
 
     return doc_dict
+
+def zip_file(filepath, delete_original=True, output_filepath= None, output_filename=None):
+    """
+    Zip a file.
+    :param filepath: path to the file to zip
+    :param delete_original: delete the original file
+    :param output_filepath: path to the output file
+    :param output_filename: name of the output file
+    :return:
+    """
+    if output_filepath is None:
+        output_filepath = os.path.dirname(filepath)
+    if output_filename is None:
+        output_filename = os.path.basename(filepath) + '.zip'
+    with zipfile.ZipFile(os.path.join(output_filepath, output_filename), 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.write(filepath, os.path.basename(filepath))
+    if delete_original:
+        os.remove(filepath)
+
 
 def getDocDict(filepath_video_games, csv_doc_dict):
     if os.path.exists(csv_doc_dict):
@@ -96,33 +125,29 @@ def getDocDict(filepath_video_games, csv_doc_dict):
         df.to_csv(csv_doc_dict, encoding='utf-8')
         return doc_dict
 
-def write_dict_to_csv(dict, columns, filename):
+def write_dict_to_csv(dict, columns, csvfile):
     """
     Write a dictionary to a CSV file.
     :param dict: dictionary to write
     :param columns: column names
-    :param filename: file name
+    :param csvfile: the csvfile
     :return:
     """
-    with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=columns)
-        writer.writeheader()
-        for key in dict.keys():
-            row = {columns[0]:key}
-            for column in columns[1:]:
-                row[column] = dict[key]
-            try:
-                writer.writerow(row)
-            except:
-                print(row)
+    writer = csv.DictWriter(csvfile, fieldnames=columns)
+    writer.writeheader()
+    for key in dict.keys():
+        row = {columns[0]:key}
+        for column in columns[1:]:
+            row[column] = dict[key]
+            writer.writerow(row)
 
 
-def read_dict_from_csv(filename, columns):
+
+def read_dict_from_csv(csvfile, columns):
     """
-    Read a dictionary from a CSV file.
-    :param filename:
+    Read a dictionary from a CSV file. The first column is the key, the second column is the value.
     :param columns:
+    :param csvfile: the csvfile
     :return: dictionary
     """
-    with open(filename, 'r', newline='', encoding='utf-8') as csvfile:
-        return {row[columns[0]]:row[columns[1]] for row in csv.DictReader(csvfile)}
+    return {row[columns[0]]:row[columns[1]] for row in csv.DictReader(csvfile)}

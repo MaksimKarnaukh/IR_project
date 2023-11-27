@@ -49,6 +49,8 @@ class DataPreprocessor:
         tokens = self.remove_stop_words(tokens)
         # Stemming
         tokens = self.stem_tokens(tokens)
+        # Remove unicode characters
+        tokens = self.remove_unicode(tokens)
         # Reassemble the preprocessed text
         preprocessed_text = " ".join(tokens)
 
@@ -64,3 +66,18 @@ class DataPreprocessor:
         except LookupError:
             nltk.download('punkt')
             nltk.download('stopwords')
+
+
+    def remove_unicode(self, tokens):
+        """
+        Remove all Unicode characters from a string.
+        :param input_str: input string
+        :return: string with only ASCII characters
+        """
+        # remove all non-ASCII characters from each token
+        new_tokens = []
+        for token in tokens:
+            new_token = re.sub(r'[^\x00-\x7F]+', '', token)
+            if new_token != '':
+                new_tokens.append(new_token)
+        return new_tokens
