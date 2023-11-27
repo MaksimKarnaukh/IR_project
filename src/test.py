@@ -29,3 +29,11 @@ def calculatePrecisionAndRecall(expected, retrieved) -> tuple:
 if __name__ == '__main__':
     d = read_gt(filepath_path_gt)  # Read ground truth
     # print(d["Assassin's Creed IV: Black Flag"])
+
+    # Wikipedia example: expected output is
+    # precision = 5/8 = 0.625
+    # recall = 5/12 = 0.41666...
+    exp = ['dog0', 'dog1', 'dog2', 'dog3', 'dog4', 'dog5', 'dog6', 'dog7', 'dog8', 'dog9', 'dog10', 'dog11']
+    ret = ['dog0', 'dog1', 'dog2', 'dog3', 'dog4', "cat1", "cat2", "cat3"]
+    print(calculatePrecisionAndRecall(exp, ret))
+    
