@@ -1,12 +1,14 @@
 from typing import List
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from data_preprocessor import DataPreprocessor
 
 
 class RelatedDocumentsRetrieval:
-    def __init__(self, documents):
+    def __init__(self, document_titles, documents):
+        self.document_titles: List[str] = document_titles
         self.documents: List[str] = documents
-        # self.preprocessor = DataPreprocessor()
+        self.preprocessor = DataPreprocessor()
         self.vectorizer = TfidfVectorizer()
 
     def preprocess_documents(self):
@@ -23,12 +25,14 @@ class RelatedDocumentsRetrieval:
         tfidf_matrix = self.vectorizer.fit_transform(preprocessed_documents)
         return tfidf_matrix
 
-    def retrieve_similar_documents(self, query_document, num_results=5):
+    def retrieve_similar_documents(self, query_document, by_title="", num_results=5, is_query_preprocessed=False):
         """
         Retrieve similar documents to the given query document.
         """
         # Preprocess the query document
-        preprocessed_query = self.preprocessor.preprocess_text(query_document)
+        preprocessed_query = query_document
+        if not is_query_preprocessed:
+            preprocessed_query = self.preprocessor.preprocess_text(query_document)
         # Vectorize the query document
         query_vector = self.vectorizer.transform([preprocessed_query])
         # Calculate cosine similarity between the query and all documents
@@ -36,8 +40,9 @@ class RelatedDocumentsRetrieval:
         # Get indices of top similar documents
         similar_indices = similarities.argsort()[:-num_results-1:-1]
         # Retrieve and return the similar documents
-        similar_documents = [self.documents[i] for i in similar_indices]
-        return similar_documents
+        similar_documents = [self.documents[i] for i in similar_indices if not self.document_titles[i] == by_title]
+        similar_documents_titles = [self.document_titles[i] for i in similar_indices if not self.document_titles[i] == by_title]
+        return similar_documents_titles, similar_documents
 
 
 if __name__ == '__main__':
