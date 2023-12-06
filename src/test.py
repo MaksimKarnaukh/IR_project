@@ -31,7 +31,7 @@ def testAll():
     ground_truth_labels: dict = read_gt(filepath_path_gt)
 
     for gt in ground_truth_labels.keys():
-        pass
+        return 'gay test'
 
 if __name__ == '__main__':
     d = read_gt(filepath_path_gt)  # Read ground truth
