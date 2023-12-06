@@ -2,6 +2,7 @@ from utils import *
 
 filepath_path_gt = 'input/gt'
 
+
 def calculatePrecisionAndRecall(expected, retrieved) -> tuple:
     """
     • P(recision) = TP/(TP+FP) how much correct of found
@@ -25,6 +26,12 @@ def calculatePrecisionAndRecall(expected, retrieved) -> tuple:
 
     return precision, recall
 
+
+def testAll():
+    ground_truth_labels: dict = read_gt(filepath_path_gt)
+
+    for gt in ground_truth_labels.keys():
+        pass
 
 if __name__ == '__main__':
     d = read_gt(filepath_path_gt)  # Read ground truth
