@@ -36,7 +36,7 @@ def testAll():
     retrieval_system.tfidf_matrix = retrieval_system.vectorize_documents(documents)
 
     metrics = {"precisions": [], "recalls": []}
-    for title, similar_documents_gt in alive_it(ground_truth_labels.items(), "Testing"):
+    for title, similar_documents_gt in alive_it(ground_truth_labels.items(), title= "Testing"):
         query_document = doc_dict[title]
         similar_documents_titles, similar_documents = retrieval_system.retrieve_similar_documents(query_document, title, 10)
         par = calculatePrecisionAndRecall(similar_documents_gt, similar_documents_titles)
