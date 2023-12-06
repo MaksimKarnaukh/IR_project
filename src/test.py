@@ -42,6 +42,7 @@ def testAll():
         par = calculatePrecisionAndRecall(similar_documents_gt, similar_documents_titles)
         metrics["precisions"].append(par[0])
         metrics["recalls"].append(par[1])
+    print('\n')
     print("Average precision: ", sum(metrics["precisions"])/len(metrics["precisions"]))
     print("Average recall: ", sum(metrics["recalls"])/len(metrics["recalls"]))
 
