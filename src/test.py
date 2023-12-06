@@ -1,6 +1,6 @@
+from src.related_doc_retrieval import RelatedDocumentsRetrieval
 from utils import *
-
-filepath_path_gt = 'input/gt'
+import variables
 
 
 def calculatePrecisionAndRecall(expected, retrieved) -> tuple:
@@ -28,19 +28,31 @@ def calculatePrecisionAndRecall(expected, retrieved) -> tuple:
 
 
 def testAll():
-    ground_truth_labels: dict = read_gt(filepath_path_gt)
+    ground_truth_labels: dict = read_gt(variables.filepath_path_gt)
+    doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
+    documents = list(doc_dict.values())
+    document_titles = list(doc_dict.keys())
+    retrieval_system = RelatedDocumentsRetrieval(document_titles, documents)
+    retrieval_system.tfidf_matrix = retrieval_system.vectorize_documents(documents)
 
-    for gt in ground_truth_labels.keys():
-        return 'gay test'
+    metrics = {"precisions": [], "recalls": []}
+    for title, similar_documents_gt in alive_it(ground_truth_labels.items(), "Testing"):
+        query_document = doc_dict[title]
+        similar_documents_titles, similar_documents = retrieval_system.retrieve_similar_documents(query_document, title, 10)
+        par = calculatePrecisionAndRecall(similar_documents_gt, similar_documents_titles)
+        metrics["precisions"].append(par[0])
+        metrics["recalls"].append(par[1])
+    print("Average precision: ", sum(metrics["precisions"])/len(metrics["precisions"]))
+    print("Average recall: ", sum(metrics["recalls"])/len(metrics["recalls"]))
 
 if __name__ == '__main__':
-    d = read_gt(filepath_path_gt)  # Read ground truth
-    # print(d["Assassin's Creed IV: Black Flag"])
-
-    # Wikipedia example: expected output is
-    # precision = 5/8 = 0.625
-    # recall = 5/12 = 0.41666...
-    exp = ['dog0', 'dog1', 'dog2', 'dog3', 'dog4', 'dog5', 'dog6', 'dog7', 'dog8', 'dog9', 'dog10', 'dog11']
-    ret = ['dog0', 'dog1', 'dog2', 'dog3', 'dog4', "cat1", "cat2", "cat3"]
-    print(calculatePrecisionAndRecall(exp, ret))
-    
+    # d = read_gt(variables.filepath_path_gt)  # Read ground truth
+    # # print(d["Assassin's Creed IV: Black Flag"])
+    #
+    # # Wikipedia example: expected output is
+    # # precision = 5/8 = 0.625
+    # # recall = 5/12 = 0.41666...
+    # exp = ['dog0', 'dog1', 'dog2', 'dog3', 'dog4', 'dog5', 'dog6', 'dog7', 'dog8', 'dog9', 'dog10', 'dog11']
+    # ret = ['dog0', 'dog1', 'dog2', 'dog3', 'dog4', "cat1", "cat2", "cat3"]
+    # print(calculatePrecisionAndRecall(exp, ret))
+    testAll()

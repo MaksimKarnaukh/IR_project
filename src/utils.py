@@ -74,9 +74,6 @@ def read_dataset_file(filepath_video_games):
                 maxInt = int(maxInt / 10)
         # get the number of rows in the CSV file
         rows = list(reader)
-        nr_rows = len(rows)
-        # print the number of rows
-        # print("Number of rows: ", nr_rows)
         # Iterate over each row in the CSV file
         for row in alive_it(rows, title='Reading dataset file'):
             title = row['Title']
@@ -108,6 +105,33 @@ def zip_file(filepath, delete_original=True, output_filepath= None, output_filen
     if delete_original:
         os.remove(filepath)
 
+def correct_ampercants(file_str):
+    """
+    Correct the Fast and Furious game, some entries got corruped and are "Fast &amp; Furious: Showdown" instead of "Fast & Furious: Showdown".
+    Replaces these
+    :param file_str:
+    :return:
+    """
+
+    # replace all "Fast &amp; Furious: Showdown" with "Fast & Furious: Showdown"
+    file_str = file_str.replace("&amp;", "&")
+    return file_str
+
+def correct_dataset_file(filepath_video_games, corrected_filepath_video_games):
+    """
+    Correct the dataset file.
+    :param filepath_video_games: path to the dataset file.
+    :return:
+    """
+    # Open the CSV file
+    with open(filepath_video_games, 'r', encoding='utf-8') as file:
+        # read the file into a string
+        file_str = file.read()
+    file_str = correct_ampercants(file_str)
+    # write the string to a file
+    with open(corrected_filepath_video_games, 'w', encoding='utf-8') as file:
+        file.write(file_str)
+
 
 def getDocDict(filepath_video_games, csv_doc_dict):
     if os.path.exists(csv_doc_dict):
@@ -117,8 +141,12 @@ def getDocDict(filepath_video_games, csv_doc_dict):
         doc_dict = df.set_index('Title').T.to_dict('records')[0]
         return doc_dict
     else:
+        filename = os.path.basename(filepath_video_games)
+        directory = os.path.dirname(filepath_video_games)
+        corrected_filepath_video_games = directory+ '/corrected_'+filename
+        correct_dataset_file(filepath_video_games, corrected_filepath_video_games)
         # read the dataset file into a dictionary
-        doc_dict = read_dataset_file(filepath_video_games)
+        doc_dict = read_dataset_file(corrected_filepath_video_games)
         # read the dictionary into a panda dataframe
         # make sure the name of the index column is 'Title' and the name of the second column is 'Text'
         df = pd.DataFrame.from_dict(doc_dict, orient='index', columns=['Text']).rename_axis("Title", axis=0)

@@ -7,6 +7,7 @@ import nltk
 
 class DataPreprocessor:
     def __init__(self, language='english'):
+        self.check_nltk_data_downloaded()
         self.stop_words = set(stopwords.words(language))
         self.stemmer = PorterStemmer()
 
@@ -56,7 +57,8 @@ class DataPreprocessor:
 
         return preprocessed_text
 
-    def check_nltk_data_downloaded(self):
+    @staticmethod
+    def check_nltk_data_downloaded():
         """
         Check if the required NLTK data is downloaded.
         """
@@ -81,3 +83,4 @@ class DataPreprocessor:
             if new_token != '':
                 new_tokens.append(new_token)
         return new_tokens
+
