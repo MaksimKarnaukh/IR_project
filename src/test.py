@@ -9,7 +9,7 @@ def calculatePrecisionAndRecall(expected, retrieved) -> tuple:
     • R(ecall) = TP/(TP+FN) how much of correct
     :param expected: list of expected values (ground truth labels)
     :param retrieved: list of retrieved values (our algorithm)
-    :return: tuple(precision, retrieved)
+    :return: tuple(precision, recall)
     """
     # number of retrieved values that are also in expected (True positive)
     TP = len([ret for ret in retrieved if ret in expected])
