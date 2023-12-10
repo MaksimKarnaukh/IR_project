@@ -56,7 +56,7 @@ class SimpleGUI:
         self.entry.delete(0, tk.END)
 
 
-if __name__ == "__main__":
+def run_gui():
     root = tk.Tk()
     app = SimpleGUI(root)
     root.mainloop()
