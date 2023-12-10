@@ -1,6 +1,6 @@
 from typing import List, Set
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics.pairwise import cosine_similarity as sklearn_cosine_similarity
 from data_preprocessor import DataPreprocessor
 
 from collections import Counter
@@ -11,14 +11,26 @@ from scipy.sparse import csr_matrix
 
 
 class RelatedDocumentsRetrieval:
-    def __init__(self, document_titles, documents, use_own_vectorizer=True):
+    def __init__(self, document_titles, documents, use_own_vectorizer=True, use_own_cosine_similarity=True):
         self.document_titles: List[str] = document_titles
         self.documents: List[str] = documents
 
+        if use_own_vectorizer:
+            # todo remove
+            self.vectorizer: TfidfVectorizer = TfidfVectorizer()
+            self.vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
+        else:
+            self.vectorizer: TfidfVectorizer = TfidfVectorizer()
+            # todo remove
+            self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
+
+        if use_own_cosine_similarity:
+            self.cosine_similarity = self.calculate_cosine_simularities
+        else:
+            self.cosine_similarity = sklearn_cosine_similarity
+
         self.preprocessor: DataPreprocessor = DataPreprocessor()
 
-        self.vectorizer: TfidfVectorizer = TfidfVectorizer()
-        self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
 
     def preprocess_documents(self):
         """
@@ -52,7 +64,7 @@ class RelatedDocumentsRetrieval:
         query_vector = self.own_vectorizer.transform([preprocessed_query])
 
         # Calculate cosine similarity between the query and all documents
-        similarities = cosine_similarity(query_vector, tfidf_matrix).flatten()
+        similarities = self.cosine_similarity(query_vector, tfidf_matrix).flatten()
 
         # Get indices of top similar documents
         similar_indices = similarities.argsort()[:-num_results-1:-1]
@@ -61,6 +73,25 @@ class RelatedDocumentsRetrieval:
         similar_documents = [self.documents[i] for i in similar_indices if not self.document_titles[i] == by_title]
         similar_documents_titles = [self.document_titles[i] for i in similar_indices if not self.document_titles[i] == by_title]
         return similar_documents_titles, similar_documents
+
+    @staticmethod
+    def l2_norm(vector, axis=0):
+        """
+        Calculate L2 norm of a vector.
+        :param vector: vector
+        :return: L2 norm of the vector
+        """
+        return np.sqrt(np.sum(np.square(vector), axis=axis))
+
+    @staticmethod
+    def cosineSimularity(x,y):
+        """
+        Calculate cosine similarity between two vectors.
+        :param x: first vector in a panda series
+        :param y: second vector in a panda dataframe
+        :return: cosine similarity between x and y
+        """
+        return np.dot(y, x) / (RelatedDocumentsRetrieval.l2_norm(y, axis=1) * RelatedDocumentsRetrieval.l2_norm(x   ))
 
 
 class OwnTfidfVectorizer:
@@ -159,24 +190,59 @@ class OwnTfidfVectorizer:
         vectors = csr_matrix((data, (rows, cols)), shape=(len(self._tfidf_matrix), len(self.all_words)))
         return vectors
 
+def testCosineSimularity():
+    # define two lists or array
+    # A = np.array([2, 1, 2, 3, 2, 9])
+    # B = np.array([3, 4, 2, 4, 5, 5])
+    # cosim = RelatedDocumentsRetrieval.cosineSimularity(A, B)
+    # expected = 0.8188504723485274
+    #
+    # print("A:", A)
+    # print("B:", B)
+    # print("Expected:\t",expected)
+    # print("Actual:\t",cosim)
+    # assert abs(cosim - expected) < 0.0000000000000001
+    B = np.array([[2,1,2],[3,2,9], [-1,2,-3]])
+    A = np.array([3,4,2])
+    cosim = RelatedDocumentsRetrieval.cosineSimularity(A, B)
+    expected =  [ 0.86657824,  0.67035541, -0.04962917]
+
+    print("A:", A)
+    print("B:", B)
+    print("Expected:\t",expected)
+    print("Actual:\t",cosim)
+    for id,i in enumerate(cosim):
+
+        assert abs(i - expected[id]) < 0.0000001
+
 
 if __name__ == '__main__':
-    documents = [
-        "In the game, players have the choice to compete across any of the game modes.",
-        "Gameplay involves teams of five players on indoor courts.",
-        "The game was created by the team that later worked on Aero Fighters franchise.",
-        "Power Spikes II received mixed reception from critics.",
-        "Development involved collaboration with various designers and composers."
-    ]
+    # define two lists or array
+    A = np.array([[2, 1, 2], [3, 2, 9], [-1, 2, -3]])
+    B = np.array([3, 4, 2])
+    print("A:\n", A)
+    print("B:\n", B)
 
-    retrieval_system = RelatedDocumentsRetrieval(documents)
-    preprocessed_documents = retrieval_system.preprocess_documents()
-    retrieval_system._tfidf_matrix = retrieval_system.vectorize_documents(preprocessed_documents)
-
-    query_document = "Players compete in various game modes."
-    similar_documents = retrieval_system.retrieve_similar_documents(query_document)
-
-    print("Query Document:", query_document)
-    print("Similar Documents:")
-    for i, doc in enumerate(similar_documents, 1):
-        print(f"{i}. {doc}")
+    # compute cosine similarity
+    cosine = np.dot(A, B) / (RelatedDocumentsRetrieval.l2_norm(A, axis=1) * RelatedDocumentsRetrieval.l2_norm(B))
+    print("Cosine Similarity:\n", cosine)
+    testCosineSimularity()
+    # documents = [
+    #     "In the game, players have the choice to compete across any of the game modes.",
+    #     "Gameplay involves teams of five players on indoor courts.",
+    #     "The game was created by the team that later worked on Aero Fighters franchise.",
+    #     "Power Spikes II received mixed reception from critics.",
+    #     "Development involved collaboration with various designers and composers."
+    # ]
+    #
+    # retrieval_system = RelatedDocumentsRetrieval(documents)
+    # preprocessed_documents = retrieval_system.preprocess_documents()
+    # retrieval_system._tfidf_matrix = retrieval_system.vectorize_documents(preprocessed_documents)
+    #
+    # query_document = "Players compete in various game modes."
+    # similar_documents = retrieval_system.retrieve_similar_documents(query_document)
+    #
+    # print("Query Document:", query_document)
+    # print("Similar Documents:")
+    # for i, doc in enumerate(similar_documents, 1):
+    #     print(f"{i}. {doc}")
