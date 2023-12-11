@@ -22,14 +22,14 @@ class RelatedDocumentsRetrieval:
         if use_own_vectorizer:
             # todo remove
             self.vectorizer: TfidfVectorizer = TfidfVectorizer()
-            self.vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
+            self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
         else:
             self.vectorizer: TfidfVectorizer = TfidfVectorizer()
             # todo remove
             self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
 
         if use_own_cosine_similarity:
-            self.cosine_similarity = self.calculate_cosine_simularities
+            self.cosine_similarity = self.cosineSimularity
         else:
             self.cosine_similarity = sklearn_cosine_similarity
 
