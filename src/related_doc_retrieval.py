@@ -229,9 +229,7 @@ class OwnTfidfVectorizer:
             for word in words:
                 word_doc_count[word] = word_doc_count.get(word, 0) + 1
 
-        # idf: Dict[str, float] = {word: math.log(total_documents / (count + 1)) for word, count in word_doc_count.items()}
-        idf: Dict[str, float] = {word: math.log10(total_documents / (count)) for word, count in word_doc_count.items()}
-
+        idf: Dict[str, float] = {word: math.log(total_documents / (count + 1)) for word, count in word_doc_count.items()}
 
         return idf
 
