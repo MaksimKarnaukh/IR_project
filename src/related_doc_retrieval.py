@@ -88,16 +88,16 @@ class RelatedDocumentsRetrieval:
 
         # Calculate cosine similarity between the query and all documents
         # similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
-
         similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix.toarray())
 
-        # Get indices of top similar documents
-        similar_indices = similarities.argsort()[:-num_results-1:-1]
+        similar_indices = similarities.argsort()[:max(-num_results-1, -similarities.size-1):-1]
+        # get the scores for the similar indices
+        similar_scores = similarities[similar_indices]
 
         # Retrieve and return the similar documents
         similar_documents = [self.documents[i] for i in similar_indices if not self.document_titles[i] == by_title]
         similar_documents_titles = [self.document_titles[i] for i in similar_indices if not self.document_titles[i] == by_title]
-        return similar_documents_titles, similar_documents
+        return similar_documents_titles, similar_documents, similar_scores
 
     @staticmethod
     def l2_norm(vector, axis=0):
@@ -112,7 +112,7 @@ class RelatedDocumentsRetrieval:
         return sqrt
 
     @staticmethod
-    def cosineSimularity(x:csr_matrix,y:csr_matrix):
+    def cosineSimularity(x: csr_matrix, y: csr_matrix):
         """
         Calculate cosine similarity between two vectors.
         :param x: query vector in an array
@@ -121,6 +121,7 @@ class RelatedDocumentsRetrieval:
         """
 
         return np.dot(y, x) / (RelatedDocumentsRetrieval.l2_norm(y, axis=1) * RelatedDocumentsRetrieval.l2_norm(x))
+
 
 class OwnTfidfVectorizer:
 
