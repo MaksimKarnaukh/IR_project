@@ -77,7 +77,7 @@ def testAll():
     documents = list(doc_dict.values())
     document_titles = list(doc_dict.keys())
     retrieval_system = RelatedDocumentsRetrieval(document_titles, documents)
-    retrieval_system.tfidf_matrix = retrieval_system.vectorize_documents(documents)
+    retrieval_system.tfidf_matrix = retrieval_system.vectorize_documents()
 
     metrics = {"precisions": [], "recalls": [], "F1 scores": []}
     for title, similar_documents_gt in alive_it(ground_truth_labels.items(), title= "Testing"):
