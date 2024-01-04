@@ -7,6 +7,9 @@ from data_preprocessor import DataPreprocessor
 from collections import Counter
 import math
 
+# import pretty print
+from pprint import pprint
+
 import numpy as np
 import pandas as pd
 
@@ -109,7 +112,7 @@ class RelatedDocumentsRetrieval:
         :param y: second vector in a panda dataframe
         :return: cosine similarity between x and y
         """
-        return np.dot(y, x) / (RelatedDocumentsRetrieval.l2_norm(y, axis=1) * RelatedDocumentsRetrieval.l2_norm(x   ))
+        return np.dot(y, x) / (RelatedDocumentsRetrieval.l2_norm(y, axis=1) * RelatedDocumentsRetrieval.l2_norm(x))
 
 
 class OwnTfidfVectorizer:
@@ -164,6 +167,8 @@ class OwnTfidfVectorizer:
             tf_idf_list.append(tfidf)
 
         return tf_idf_list
+
+
 
     def calculate_tf(self, document):
         """

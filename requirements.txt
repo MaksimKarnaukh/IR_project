@@ -2,3 +2,4 @@ alive-progress
 nltk
 scikit-learn
 pandas
+IPython

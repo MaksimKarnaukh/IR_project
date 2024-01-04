@@ -155,6 +155,7 @@ def getDocDict(filepath_video_games, csv_doc_dict):
         return doc_dict
 
 
+
 def write_dict_to_csv(dict, columns, csvfile):
     """
     Write a dictionary to a CSV file.
