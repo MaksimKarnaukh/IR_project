@@ -1,9 +1,13 @@
 import time
 from typing import List, Set, Dict
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity as sklearn_cosine_similarity
 from data_preprocessor import DataPreprocessor
+from src import variables
+from scipy.sparse import csr_matrix
 
+import scipy.sparse
 from collections import Counter
 import math
 
@@ -13,7 +17,6 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 
-from scipy.sparse import csr_matrix
 from IPython.display import display
 
 
@@ -53,7 +56,7 @@ class RelatedDocumentsRetrieval:
         """
         preprocessed_documents = self.documents
         # tfidf_matrix = self.vectorizer.fit_transform(preprocessed_documents)
-        tfidf_matrix = self.own_vectorizer.fit_transform(preprocessed_documents)
+        tfidf_matrix: csr_matrix = self.own_vectorizer.fit_transform(preprocessed_documents)
 
         # display(_tfidf_matrix)
         # # _tfidf_matrix.to_csv('output/reference_dataset.csv', index=False)
@@ -69,7 +72,24 @@ class RelatedDocumentsRetrieval:
         #     print("The two matrices are not equal")
 
         self._tfidf_matrix = tfidf_matrix
+        self.store_tfidf_matrix()
         return tfidf_matrix
+
+    def store_tfidf_matrix(self):
+        """
+        Store the TF-IDF matrix to file.
+        """
+        # export the matrix to a npz file
+        self._tfidf_matrix: scipy.sparse
+        self._tfidf_matrix.save_npz(variables.tfidf_matrix_csv_path, format="csr")
+
+    def load_tfidf_matrix(self):
+        """
+        Load the TF-IDF matrix from file to a csr_matrix.
+        :return: TF-IDF matrix
+        """
+        # import the matrix from npz file
+        tfidf_matrix: csr_matrix = scipy.sparse.load_npz(variables.tfidf_matrix_csv_path)
 
     def retrieve_similar_documents(self, query_document, by_title="", num_results=5, is_query_preprocessed=False):
         """
