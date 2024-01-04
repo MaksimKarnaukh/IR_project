@@ -32,6 +32,45 @@ def calculateF1score(precision, recall) -> float:
     return F1_score
 
 
+def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, relevance_threshold=0.7):
+    """
+    kappa >= 2/3 is good
+    :param expected_pairs: expected key-val pairs: key=doc_name, val=relevance_score
+    :param retrieved_pairs: retrieved key-val pairs: key=doc_name, val=relevance_score
+    :param nr_of_docs: total number of docs taken into consideration
+    :param relevance_threshold: min relevance score of our retrieved documents
+    :return: kappa value
+    """
+    relevant_retrieved_pairs = {}
+
+    for key in retrieved_pairs.keys():
+        if retrieved_pairs[key] >= relevance_threshold:
+            relevant_retrieved_pairs[key] = retrieved_pairs[key]
+
+        # keep looping until you go under threshold
+        else:
+            break
+
+    intersection = list(set(expected_pairs.keys()).intersection(relevant_retrieved_pairs.keys()))
+
+    total_positive_agreement = len(intersection)
+    ex_conflict_agreement = len(list(set(expected_pairs.keys()) - set(intersection)))
+    ret_conflict_agreement = len(list(set(relevant_retrieved_pairs.keys()) - set(intersection)))
+    total_negative_agreement = nr_of_docs - total_positive_agreement - ex_conflict_agreement - ret_conflict_agreement
+
+    P0 = (total_positive_agreement + total_negative_agreement) / nr_of_docs
+
+    r1 = total_positive_agreement + ex_conflict_agreement
+    r2 = ret_conflict_agreement + total_negative_agreement
+    c1 = total_positive_agreement + ret_conflict_agreement
+    c2 = ex_conflict_agreement + total_negative_agreement
+    Pe = (((r1/nr_of_docs)*(c1/nr_of_docs))+((r2/nr_of_docs)*(c2/nr_of_docs)))
+
+    kappa = (P0 - Pe) / (1 - Pe)
+
+    return kappa
+
+
 def testAll():
     ground_truth_labels: dict = read_gt(variables.filepath_path_gt)
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
