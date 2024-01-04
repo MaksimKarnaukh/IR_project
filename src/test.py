@@ -53,6 +53,7 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
 
     intersection = list(set(expected_pairs.keys()).intersection(relevant_retrieved_pairs.keys()))
 
+    # number of conflicting and non-conflicting agreements
     total_positive_agreement = len(intersection)
     ex_conflict_agreement = len(list(set(expected_pairs.keys()) - set(intersection)))
     ret_conflict_agreement = len(list(set(relevant_retrieved_pairs.keys()) - set(intersection)))
@@ -60,6 +61,7 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
 
     P0 = (total_positive_agreement + total_negative_agreement) / nr_of_docs
 
+    # sum of each row and column
     r1 = total_positive_agreement + ex_conflict_agreement
     r2 = ret_conflict_agreement + total_negative_agreement
     c1 = total_positive_agreement + ret_conflict_agreement
