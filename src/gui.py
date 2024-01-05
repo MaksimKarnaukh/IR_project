@@ -10,6 +10,14 @@ from src import variables
 class SimpleGUI:
 
     def return_similar_documents(self, doc_dict, query: str, by_title: bool = False, num_results: int = 10):
+        """
+        Return similar documents to the query (and the precision and recall if applicable).
+        :param doc_dict: dictionary of documents
+        :param query: query
+        :param by_title: if True, the query is a title. Otherwise, the query is a text.
+        :param num_results: number of results to return
+        :return:
+        """
 
         similar_documents_titles, similar_documents = [], []
         if by_title:
@@ -47,28 +55,15 @@ class SimpleGUI:
         y = (screen_height/2) - (window_height/2)
         self.root.geometry('%dx%d+%d+%d' % (window_width, window_height, x, y))
 
-    # def update_input_widget(self, event):
-    #     selected_option = self.choice_var.get()
-    #     if selected_option == "Query Sentence":
-    #         self.title_combobox.pack_forget()
-    #         self.entry.pack(pady=10)
-    #     elif selected_option == "Title":
-    #         self.entry.pack_forget()
-    #         self.title_combobox.pack(pady=10)
-
     def process_input(self):
-        selected_option = self.choice_var.get()
 
-        self.output_box1.delete(1.0, tk.END)
-        self.output_box2.delete(1.0, tk.END)
+        def process_input_option(input_text, by_title: bool):
 
-        if selected_option == "Query Sentence":
-            input_text = self.entry.get()
             # check if self.num_results_entry.get() is a number in string format
             num_results = 10
             if self.num_results_entry.get().isdigit():
                 num_results = int(self.num_results_entry.get())
-            result = self.return_similar_documents(self.doc_dict, input_text, by_title=False, num_results=num_results)
+            result = self.return_similar_documents(self.doc_dict, input_text, by_title=by_title, num_results=num_results)
             if len(result) == 4:
                 similar_documents_titles, similar_documents, par0, par1 = result
 
@@ -83,44 +78,25 @@ class SimpleGUI:
             else:
                 similar_documents_titles, similar_documents = result
                 output_text1 = f""
-
+                output_text2 = f"Title not found in ground truth."
                 for i, doc in enumerate(similar_documents_titles, 1):
                     output_text1 += f"{i}. {doc}\n"
                 self.output_box1.insert(tk.END, output_text1 + "\n")
+                self.output_box2.insert(tk.END, output_text2 + "\n")
 
-            # output_text = f"You entered: {num_results}"
-            # self.output_box1.insert(tk.END, output_text + "\n")
+        selected_option = self.choice_var.get()
 
-            # self.entry.delete(0, tk.END)
+        self.output_box1.delete(1.0, tk.END)
+        self.output_box2.delete(1.0, tk.END)
+
+        if selected_option == "Query Sentence":
+            input_text = self.entry.get()
+            process_input_option(input_text, by_title=False)
+            # self.entry.delete(0, tk.END) # uncomment this line to clear the input box after processing
 
         elif selected_option == "Title":
             selected_title = self.title_combobox.get()
-            if selected_title:
-                num_results = 10
-                if self.num_results_entry.get().isdigit():
-                    num_results = int(self.num_results_entry.get())
-                result = self.return_similar_documents(self.doc_dict, selected_title, by_title=True, num_results=num_results)
-                if len(result) == 4:
-                    similar_documents_titles, similar_documents, par0, par1 = result
-                    print(result)
-                    output_text1 = ""
-                    output_text2 = f"Precision: {par0}\n" \
-                                   f"Recall: {par1}\n"
-                    for i, doc in enumerate(similar_documents_titles, 1):
-                        output_text1 += f"{i}. {doc}\n"
-                    self.output_box1.insert(tk.END, output_text1 + "\n")
-                    self.output_box2.insert(tk.END, output_text2 + "\n")
-                else:
-                    similar_documents_titles, similar_documents = result
-                    output_text1 = f""
-                    output_text2 = f"Title not found in ground truth."
-                    for i, doc in enumerate(similar_documents_titles, 1):
-                        output_text1 += f"{i}. {doc}\n"
-                    self.output_box1.insert(tk.END, output_text1 + "\n")
-                    self.output_box2.insert(tk.END, output_text2 + "\n")
-
-                # output_text = f"You selected the title: {selected_title}"
-                # self.output_box1.insert(tk.END, output_text + "\n")
+            process_input_option(selected_title, by_title=True)
 
     def __init__(self, root, doc_dict, retrieval_system):
 
@@ -129,8 +105,6 @@ class SimpleGUI:
         self.document_titles = list(doc_dict.keys())
 
         self.retrieval_system = retrieval_system
-
-
 
         self.root = root
         root.title("Similar Documents Retrieval System")
@@ -142,7 +116,7 @@ class SimpleGUI:
         style = ttk.Style()
         style.configure("TButton", font=("Helvetica", 14))
 
-        # GUI initialization code
+        ### GUI initialization code ###
 
         # Dropdown for choosing either Query Sentence or Title
         self.choice_var = tk.StringVar()
@@ -153,23 +127,22 @@ class SimpleGUI:
         self.choice_combobox.pack(pady=10)
 
         # Input Entry
-        self.entry_label = ttk.Label(root, text="Input:", font=("Helvetica", 16))
+        self.entry_label = ttk.Label(root, text="Query input:", font=("Helvetica", 16))
         self.entry_label.pack()
         self.entry = ttk.Entry(root, font=("Helvetica", 14))
         self.entry.pack(pady=10)
+
+        # A list of titles
+        titles = sorted(self.document_titles)
+        # Create a title Combobox
+        self.title_combobox = ttk.Combobox(root, values=titles, font=("Helvetica", 14), state="readonly")
+        self.title_combobox.pack(pady=10)
 
         # Additional Input for Number of Results
         self.num_results_label = ttk.Label(root, text="Number of Results:", font=("Helvetica", 16))
         self.num_results_label.pack()
         self.num_results_entry = ttk.Entry(root, font=("Helvetica", 14))
         self.num_results_entry.pack(pady=10)
-
-        # A list of titles
-        titles = sorted(self.document_titles)
-
-        # Create a title Combobox
-        self.title_combobox = ttk.Combobox(root, values=titles, font=("Helvetica", 14), state="readonly")
-        self.title_combobox.pack(pady=10)
 
         # Process Input Button
         self.process_button = ttk.Button(root, text="Process Input", command=self.process_input, style="TButton")
@@ -186,24 +159,6 @@ class SimpleGUI:
         self.output_label2.pack()
         self.output_box2 = tk.Text(root, height=5, width=60, wrap=tk.WORD, font=("Helvetica", 12))
         self.output_box2.pack(padx=10, pady=5)
-
-        # # PanedWindow for two output boxes
-        # self.paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL)
-        # self.paned_window.pack(expand=True, fill='both')
-        #
-        # # Output Text Box 1
-        # self.output_label1 = ttk.Label(self.paned_window, text="", font=("Helvetica", 16))
-        # self.output_label1.pack()
-        # self.output_box1 = tk.Text(self.paned_window, height=15, width=40, wrap=tk.WORD, font=("Helvetica", 12))
-        # self.output_box1.pack(padx=10, pady=5)
-        # self.paned_window.add(self.output_box1)
-        #
-        # # Output Text Box 2
-        # self.output_label2 = ttk.Label(self.paned_window, text="", font=("Helvetica", 16))
-        # self.output_label2.pack()
-        # self.output_box2 = tk.Text(self.paned_window, height=15, width=20, wrap=tk.WORD, font=("Helvetica", 12))
-        # self.output_box2.pack(padx=10, pady=5)
-        # self.paned_window.add(self.output_box2)
 
 
 def run_gui(doc_dict, retrieval_system):
