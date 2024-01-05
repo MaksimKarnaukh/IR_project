@@ -199,7 +199,7 @@ def store_tfidf_matrix(_tfidf_matrix):
     # dense_array = self._tfidf_matrix.toarray()
     # df = pd.DataFrame(dense_array)
     # df.to_csv(variables.tfidf_matrix_csv_path, index=False)
-    sparse.save_npz(variables.tfidf_matrix_csv_path, _tfidf_matrix)
+    sparse.save_npz(variables.tfidf_matrix_csv_path, _tfidf_matrix, compressed=False)
 
 def load_tfidf_matrix():
     """
