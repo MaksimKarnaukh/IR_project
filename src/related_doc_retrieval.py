@@ -318,6 +318,7 @@ class OwnTfidfVectorizer:
         print(f"Done converting TF-IDF to pandas dataframe in {time.time() - start} seconds")
         return self._tfidf_matrix
 
+
 def testCosineSimularity():
     """
     Test cosine simularity
@@ -338,8 +339,11 @@ def testCosineSimularity():
         assert abs(i - expected[id]) < 0.0000001
 
 
-
 def testSimilarDocuments():
+    """
+    Test similar documents retrieval function on a small toy example
+    :return:
+    """
     l = ['data science is one of the most important fields of science',
      'this is one of the best data science courses',
      'data scientists analyze data']
