@@ -14,6 +14,8 @@ import math
 # import pretty print
 from pprint import pprint
 
+from scipy.sparse import csr_matrix
+
 import numpy as np
 import pandas as pd
 

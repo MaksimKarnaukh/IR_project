@@ -9,6 +9,12 @@ from alive_progress import alive_it
 import pandas as pd
 import csv
 import gzip
+from scipy.sparse import csr_matrix
+import scipy.sparse
+from scipy import sparse
+
+from src import variables
+
 
 def read_gt(filename):
     """
