@@ -82,7 +82,7 @@ class SimpleGUI:
                 self.output_box2.insert(tk.END, output_text2 + "\n")
             else:
                 similar_documents_titles, similar_documents = result
-                output_text1 = f"Similar Documents:\n"
+                output_text1 = f""
 
                 for i, doc in enumerate(similar_documents_titles, 1):
                     output_text1 += f"{i}. {doc}\n"
@@ -91,7 +91,7 @@ class SimpleGUI:
             # output_text = f"You entered: {num_results}"
             # self.output_box1.insert(tk.END, output_text + "\n")
 
-            self.entry.delete(0, tk.END)
+            # self.entry.delete(0, tk.END)
 
         elif selected_option == "Title":
             selected_title = self.title_combobox.get()
