@@ -77,8 +77,7 @@ class RelatedDocumentsRetrieval:
         # Calculate cosine similarity between the query and all documents
         # similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
         # similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix.toarray())
-        similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix)
-
+        similarities = self.cosine_similarity(query_vector[0,:], tfidf_matrix)
         similar_indices = similarities.argsort()[:max(-num_results-1, -similarities.size-1):-1]
         # get the scores for the similar indices
         similar_scores = similarities[similar_indices]
@@ -95,10 +94,35 @@ class RelatedDocumentsRetrieval:
         :param vector: vector
         :return: L2 norm of the vector
         """
+        from scipy.sparse.linalg import norm
+        # sq = np.power(vector, 2)
+        # s = np.sum(sq, axis=axis)
+        # sqrt = np.sqrt(s)
+        return norm(vector, 2, axis=axis)
+    @staticmethod
+    def l2_norm_original(vector, axis=0):
+        """
+        Calculate L2 norm of a vector.
+        :param vector: vector
+        :return: L2 norm of the vector
+        """
         sq = np.square(vector)
         s = np.sum(sq, axis=axis)
         sqrt = np.sqrt(s)
         return sqrt
+    @staticmethod
+    def cosineSimilarityOriginal(x:csr_matrix, y:csr_matrix):
+        """
+        Calculate cosine similarity between two vectors.
+        :param x: query vector in an array
+        :param y: document vector in an array
+        :return: cosine similarity between x and each row in the document matrix y
+        """
+        dot_product = np.dot(y, x)
+        magnitude_y = RelatedDocumentsRetrieval.l2_norm_original(y, axis=1)
+        magnitude_x = RelatedDocumentsRetrieval.l2_norm_original(x)
+        similarity = dot_product / ( magnitude_x * magnitude_y )
+        return similarity
 
     @staticmethod
     def cosineSimularity(x: csr_matrix, y: csr_matrix):
@@ -109,7 +133,22 @@ class RelatedDocumentsRetrieval:
         :return: cosine similarity between x and each row in the document matrix y
         """
 
-        # return np.dot(y, x) / (RelatedDocumentsRetrieval.l2_norm(y, axis=1) * RelatedDocumentsRetrieval.l2_norm(x))
+        # Compute the dot product between x and y
+        dot_product = y.dot(x.T)
+        # square each element in x manually as x.power(2) does not work
+        x = x.multiply(x)
+        y = y.multiply(y)
+
+
+        # Compute the L2 norms (magnitudes) of x and y
+        magnitude_x = np.sqrt(np.sum(x))
+        magnitude_y = np.sqrt(np.sum(y, axis=1))
+
+        # Compute the cosine similarity
+        cosine_similarity = dot_product / (magnitude_x * magnitude_y)
+        returnval = cosine_similarity.transpose()
+        returnval = returnval.toarray()[0]
+        return returnval
 
         num_documents = y.shape[0]
         similarities = np.zeros(num_documents)
@@ -177,6 +216,14 @@ class OwnTfidfVectorizer:
         """
         Get all words in the collection of documents.
         """
+        words: set = set()
+        for doc in self.documents:
+            for word in doc.split():
+                words.add(word)
+        # return an ordered list of words
+        return list(sorted(words))
+
+
         return list(set(word for doc in self.documents for word in doc.split()))
 
     def calculate_tfidf(self):
@@ -265,19 +312,10 @@ class OwnTfidfVectorizer:
         return self._tfidf_matrix
 
 def testCosineSimularity():
-    # define two lists or array
-    # A = np.array([2, 1, 2, 3, 2, 9])
-    # B = np.array([3, 4, 2, 4, 5, 5])
-    # cosim = RelatedDocumentsRetrieval.cosineSimularity(A, B)
-    # expected = 0.8188504723485274
-    #
-    # print("A:", A)
-    # print("B:", B)
-    # print("Expected:\t",expected)
-    # print("Actual:\t",cosim)
-    # assert abs(cosim - expected) < 0.0000000000000001
-    B = np.array([[2,1,2],[3,2,9], [-1,2,-3]])
-    A = np.array([3,4,2])
+    from scipy.sparse import csr_matrix
+
+    B = csr_matrix(np.array([[2,1,2],[3,2,9], [-1,2,-3]]))
+    A = csr_matrix(np.array([3,4,2]))
     cosim = RelatedDocumentsRetrieval.cosineSimularity(A, B)
     expected =  [ 0.86657824,  0.67035541, -0.04962917]
 
@@ -286,20 +324,26 @@ def testCosineSimularity():
     print("Expected:\t",expected)
     print("Actual:\t",cosim)
     for id,i in enumerate(cosim):
-
         assert abs(i - expected[id]) < 0.0000001
+
+    l = ['data science is one of the most important fields of science',
+     'this is one of the best data science courses',
+     'data scientists analyze data']
+
+    q = ['data scientists is analyze courses data space']
+
+    document_titles = ["doc1", "doc2", "doc3"]
+    documents = l
+
+    retrieval_system = RelatedDocumentsRetrieval(document_titles, documents)
+    tfidf_matrix = retrieval_system.vectorize_documents()
+
+    similar_documents_titles, similar_documents, scores = retrieval_system.retrieve_similar_documents(q[0], "", 5, is_query_preprocessed=True)
+    assert similar_documents_titles == ['doc3', 'doc2', 'doc1']
+
 
 
 if __name__ == '__main__':
-    # define two lists or array
-    A = np.array([[2, 1, 2], [3, 2, 9], [-1, 2, -3]])
-    B = np.array([3, 4, 2])
-    print("A:\n", A)
-    print("B:\n", B)
-
-    # compute cosine similarity
-    cosine = np.dot(A, B) / (RelatedDocumentsRetrieval.l2_norm(A, axis=1) * RelatedDocumentsRetrieval.l2_norm(B))
-    print("Cosine Similarity:\n", cosine)
     testCosineSimularity()
     # documents = [
     #     "In the game, players have the choice to compete across any of the game modes.",
