@@ -1,24 +1,15 @@
 import os
 import time
 from typing import List, Set, Dict
-
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity as sklearn_cosine_similarity
 from data_preprocessor import DataPreprocessor
-
 from collections import Counter
 import math
-
-
 from scipy.sparse import csr_matrix
-
 import numpy as np
 import pandas as pd
-
-from IPython.display import display
-
 from src import variables, utils
-from src.utils import load_tfidf_matrix
 
 
 class RelatedDocumentsRetrieval:
@@ -48,24 +39,24 @@ class RelatedDocumentsRetrieval:
     def initialize_tf_idf_matrix(self, documents, force_rerun=False):
         """
         Initialize the TF-IDF matrix.
-        :param documents:
+        :param documents: list of documents to vectorize.
+        :param force_rerun: force rerun the vectorization process without saving the tfidf matrix to file.
         :return:
         """
-        # check if tfidf_matrix.csv exists
         self._tfidf_matrix = None
-        if isinstance(self.vectorizer, TfidfVectorizer):
+        if isinstance(self.vectorizer, TfidfVectorizer): # if using sklearn's vectorizer, need to use their fit_transform
             tfidf_matrix = self.vectorizer.fit_transform(documents)
             self._tfidf_matrix = tfidf_matrix
-        else:
+        else: # if using our own vectorizer
             if force_rerun:
                 self._tfidf_matrix = self.vectorize_documents()
-
+            # if the tfidf matrix is already stored in a file, load it.
+            # Otherwise, vectorize the documents and store the matrix in a file.
             elif not os.path.isfile(variables.tfidf_matrix_csv_path):
                 self._tfidf_matrix = self.vectorize_documents()
                 utils.store_tfidf_matrix(self._tfidf_matrix)
             else:
                 self._tfidf_matrix = utils.load_tfidf_matrix()
-                # self.own_vectorizer.fit_transform(documents, self._tfidf_matrix)
                 self.vectorizer.fit_transform(documents, self._tfidf_matrix)
 
     def vectorize_documents(self):
@@ -91,13 +82,7 @@ class RelatedDocumentsRetrieval:
             preprocessed_query = self.preprocessor.preprocess_text(query_document)
 
         # Vectorize the query document
-        # query_vector = self.vectorizer.transform([preprocessed_query])
-        # query_vector = self.own_vectorizer.transform([preprocessed_query])
         query_vector = self.vectorizer.transform([preprocessed_query])
-
-        # Calculate cosine similarity between the query and all documents
-        # similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
-        # similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix.toarray())
 
         similarities = None
         if self.cosine_similarity == self.cosineSimularity:
@@ -132,9 +117,6 @@ class RelatedDocumentsRetrieval:
         :return: L2 norm of the vector
         """
         from scipy.sparse.linalg import norm
-        # sq = np.power(vector, 2)
-        # s = np.sum(sq, axis=axis)
-        # sqrt = np.sqrt(s)
         return norm(vector, 2, axis=axis)
 
     @staticmethod
@@ -156,6 +138,9 @@ class RelatedDocumentsRetrieval:
         :param x: query vector in an array
         :param y: document vector in an array
         :return: cosine similarity between x and each row in the document matrix y
+
+        THIS IS THE ORIGINAL IMPLEMENTATION USING ARRAYS, THIS IS NOT USED ANYMORE BECAUSE OF MEMORY ISSUES.
+        cosineSimularity IS USED INSTEAD.
         """
         dot_product = np.dot(y, x)
         magnitude_y = RelatedDocumentsRetrieval.l2_norm_original(y, axis=1)
@@ -178,7 +163,6 @@ class RelatedDocumentsRetrieval:
         x = x.multiply(x)
         y = y.multiply(y)
 
-
         # Compute the L2 norms (magnitudes) of x and y
         magnitude_x = np.sqrt(np.sum(x))
         magnitude_y = np.sqrt(np.sum(y, axis=1))
@@ -188,30 +172,6 @@ class RelatedDocumentsRetrieval:
         returnval = cosine_similarity.transpose()
         returnval = returnval.toarray()[0]
         return returnval
-
-        num_documents = y.shape[0]
-        similarities = np.zeros(num_documents)
-
-        query_norm = RelatedDocumentsRetrieval.l2_norm(x)
-
-        for i in range(num_documents):
-            dot_product = x.dot(y[i, :]) #todo check if this is correct (add .T ?)
-            document_norm = RelatedDocumentsRetrieval.l2_norm(y[i, :], axis=1)
-
-            similarities[i] = dot_product / (query_norm * document_norm)
-
-            if i % 1000 == 0:
-                print(f"Similarity {i}: ", similarities[i])
-
-        return similarities
-
-
-        # dot_product = x.dot(y.T)
-        # norm_x = np.sqrt(x.power(2).sum(axis=1))
-        # norm_y = np.sqrt(y.power(2).sum(axis=1))
-        #
-        # similarity = dot_product / (norm_x.dot(norm_y.T))
-        # return similarity
 
 
 class OwnTfidfVectorizer:
@@ -226,6 +186,12 @@ class OwnTfidfVectorizer:
         self._tfidf_matrix: pd.DataFrame = None
 
     def fit_transform(self, documents: List[str], tfidf_matrix=None):
+        """
+        Fit the vectorizer to the documents and transform the documents to a tfidf matrix.
+        :param documents: list of documents
+        :param tfidf_matrix: tfidf matrix
+        :return: tfidf matrix: csr_matrix
+        """
         self.documents = documents
         self.all_words = self.get_all_words()
         if tfidf_matrix is None:
@@ -235,21 +201,25 @@ class OwnTfidfVectorizer:
         return self._tfidf_matrix
 
     def transform(self, query_document: List[str]):
+        """
+        Transform a query document to a tfidf matrix.
+        :param query_document: query document as a single element of a list
+        :return: query tfidf matrix: csr_matrix
+        """
         query_document = query_document[0] # for compatibility with sklearn
         tf: Dict[str, float] = self.calculate_tf(query_document)
         idf: Dict[str, float] = self.calculate_idf()
 
-        # multiply tf and idf for each word in the query document if the word is in the idf else multiply by log(number of documents)
+        # multiply tf and idf for each word in the query document if the word is in the idf
         tfidf: Dict[str, float] = {word: tf[word] * idf[word] for word in tf if word in idf}
 
-        # create a single row csr matrix where the columns are the words just like the tfidf matrix and the values are the tfidf values
+        # create a single row csr matrix
         tfidf_matrix = csr_matrix((1, len(self.all_words)))
 
         for word in tfidf:
             tfidf_matrix[0, self.all_words.index(word)] = tfidf[word]
 
         return tfidf_matrix
-
 
     def get_all_words(self):
         """
@@ -266,7 +236,7 @@ class OwnTfidfVectorizer:
     def calculate_tfidf(self):
         """
         Multiply TF and IDF for each word in each document.
-        :return:
+        :return: list of dictionaries with the TFIDF for each word in each document
         """
         idf: Dict[str, float] = self.calculate_idf()
 
@@ -349,6 +319,10 @@ class OwnTfidfVectorizer:
         return self._tfidf_matrix
 
 def testCosineSimularity():
+    """
+    Test cosine simularity
+    :return:
+    """
     from scipy.sparse import csr_matrix
 
     B = csr_matrix(np.array([[2,1,2],[3,2,9], [-1,2,-3]]))
@@ -360,7 +334,7 @@ def testCosineSimularity():
     print("B:", B)
     print("Expected:\t",expected)
     print("Actual:\t",cosim)
-    for id,i in enumerate(cosim):
+    for id, i in enumerate(cosim):
         assert abs(i - expected[id]) < 0.0000001
 
 
