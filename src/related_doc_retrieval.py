@@ -75,9 +75,9 @@ class RelatedDocumentsRetrieval:
         query_vector = self.own_vectorizer.transform([preprocessed_query])
 
         # Calculate cosine similarity between the query and all documents
-        similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
+        # similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
         # similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix.toarray())
-        # similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix)
+        similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix)
 
         similar_indices = similarities.argsort()[:max(-num_results-1, -similarities.size-1):-1]
         # get the scores for the similar indices
