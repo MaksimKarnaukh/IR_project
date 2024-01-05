@@ -21,8 +21,8 @@ def calculatePrecisionAndRecall(expected, retrieved) -> tuple:
     FN = len([ex for ex in expected if ex not in retrieved])
 
     # precision and recall calculation (by formula)
-    precision = TP/(TP+FP)
-    recall = TP/(TP+FN)
+    precision = TP/(TP+FP) if TP+FP != 0 else 0
+    recall = TP/(TP+FN) if TP+FN != 0 else 0
 
     return precision, recall
 
