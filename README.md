@@ -11,7 +11,12 @@ Implementation is in Python and the project is structured as follows:
 
 Project root:
 - **input**: contains the dataset and the ground-truth labels, a correction of the dataset will also be stored here.
+  - **gt**: contains the ground-truth labels of the dataset.
+  - **video_games.txt**: contains the dataset of the project. (too large to upload to github so it must be downloaded from the dataset source)
+  - **video_games_corrected.txt**: contains the corrected dataset of the project. (will be created after running the system)
 - **output**: contains the output of the system which includes the pre-processed documents and the tfidf_matrix.
+  - **processed_docs.csv.gz**: contains the compressed pre-processed documents of the dataset.
+  - **tfidf_matrix.npz**: contains the tfidf_matrix of the dataset in compressed sparse matrix format.
 - **src**: contains the source code of the project.
   - **main.py**: the main file of the project, this is where the gui is run from.
   - **gui.py**: the gui of the project, this is where the user can interact with the system.
