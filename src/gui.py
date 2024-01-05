@@ -164,7 +164,7 @@ class SimpleGUI:
         self.num_results_entry.pack(pady=10)
 
         # A list of titles
-        titles = self.document_titles
+        titles = sorted(self.document_titles)
 
         # Create a title Combobox
         self.title_combobox = ttk.Combobox(root, values=titles, font=("Helvetica", 14), state="readonly")
