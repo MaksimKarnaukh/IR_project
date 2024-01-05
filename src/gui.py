@@ -1,10 +1,58 @@
 import tkinter as tk
 from tkinter import ttk
 
+from test import calculatePrecisionAndRecall
+from utils import *
+from related_doc_retrieval import *
+from src import variables
+
+
+def return_similar_documents(doc_dict, query: str, by_title: bool = False, num_results: int = 10):
+
+    documents = list(doc_dict.values())
+    document_titles = list(doc_dict.keys())
+
+    retrieval_system = RelatedDocumentsRetrieval(document_titles, documents)
+
+    # check if tfidf_matrix.csv exists
+    retrieval_system._tfidf_matrix = None
+    if not os.path.isfile(variables.tfidf_matrix_csv_path):
+        retrieval_system._tfidf_matrix = retrieval_system.vectorize_documents()
+        store_tfidf_matrix(retrieval_system._tfidf_matrix)
+    else:
+        retrieval_system._tfidf_matrix = load_tfidf_matrix()
+        retrieval_system.own_vectorizer.fit_transform(documents, retrieval_system._tfidf_matrix)
+
+    similar_documents_titles, similar_documents = [], []
+    if by_title:
+        query_document = doc_dict[query]
+        similar_documents_titles, similar_documents, scores = retrieval_system.retrieve_similar_documents(query_document, query, num_results)
+    else:
+        similar_documents_titles, similar_documents, scores = retrieval_system.retrieve_similar_documents(query, "", num_results)
+
+    print("Query Document:", query)
+    print("Similar Documents:")
+    for i, doc in enumerate(similar_documents_titles, 1):
+        print(f"{i}. {doc}")
+
+    if by_title:
+        title = query
+        d = read_gt(variables.filepath_path_gt)  # Read ground truth
+        print(d[title])
+
+        expected = list(d[title].keys())
+        par = calculatePrecisionAndRecall(expected, similar_documents_titles)
+        print("fraction of relevant instances among the retrieved instances: ", par[0])
+        print("fraction of relevant instances that were retrieved: ", par[1])
+
+        return similar_documents_titles, similar_documents, par[0], par[1]
+
+    return similar_documents_titles, similar_documents
+
 
 class SimpleGUI:
 
-    def center_window(self, window_width=650, window_height=600):
+    def center_window(self, window_width=650, window_height=650):
         """
         Center the window on the screen.
         :param window_width: window width
@@ -32,16 +80,64 @@ class SimpleGUI:
 
         if selected_option == "Query Sentence":
             input_text = self.entry.get()
-            output_text = f"You entered: {input_text}"
-            self.output_box.insert(tk.END, output_text + "\n")
+            output_text = ""
+            result = return_similar_documents(self.doc_dict, input_text, by_title=False, num_results=10)
+            if len(result) == 4:
+                similar_documents_titles, similar_documents, par0, par1 = result
+                # output_text1 = f"Query Sentence: {input_text}\n" \
+                #               f"Precision: {par0}\n" \
+                #               f"Recall: {par1}\n" \
+                #               f"Similar Documents:\n"
+                output_text1 = f"Similar Documents:\n"
+                output_text2 = f"Precision: {par0}\n" \
+                               f"Recall: {par1}\n"
+
+                for i, doc in enumerate(similar_documents_titles, 1):
+                    output_text1 += f"{i}. {doc}\n"
+                self.output_box1.insert(tk.END, output_text1 + "\n")
+                self.output_box2.insert(tk.END, output_text2 + "\n")
+            else:
+                similar_documents_titles, similar_documents = result
+                output_text1 = f"Similar Documents:\n"
+
+                for i, doc in enumerate(similar_documents_titles, 1):
+                    output_text += f"{i}. {doc}\n"
+                self.output_box1.insert(tk.END, output_text1 + "\n")
+
+            # output_text = f"You entered: {input_text}"
+            self.output_box1.insert(tk.END, output_text + "\n")
             self.entry.delete(0, tk.END)
         elif selected_option == "Title":
             selected_title = self.title_combobox.get()
             if selected_title:
-                output_text = f"You selected the title: {selected_title}"
-                self.output_box.insert(tk.END, output_text + "\n")
+                output_text = ""
+                result = return_similar_documents(self.doc_dict, selected_title, by_title=True, num_results=10)
+                if len(result) == 4:
+                    similar_documents_titles, similar_documents, par0, par1 = result
+                    # output_text1 = f"Title: {selected_title}\n" \
+                    #               f"Precision: {par0}\n" \
+                    #               f"Recall: {par1}\n" \
+                    #               f"Similar Documents:\n"
+                    output_text1 = f"Similar Documents:\n"
+                    output_text2 = f"Precision: {par0}\n" \
+                                   f"Recall: {par1}\n"
+                    for i, doc in enumerate(similar_documents_titles, 1):
+                        output_text1 += f"{i}. {doc}\n"
+                    self.output_box1.insert(tk.END, output_text1 + "\n")
+                    self.output_box2.insert(tk.END, output_text2 + "\n")
+                else:
+                    similar_documents_titles, similar_documents = result
+                    output_text1 = f"Similar Documents:\n"
+                    for i, doc in enumerate(similar_documents_titles, 1):
+                        output_text1 += f"{i}. {doc}\n"
+                    self.output_box1.insert(tk.END, output_text1 + "\n")
 
-    def __init__(self, root):
+                # output_text = f"You selected the title: {selected_title}"
+                # self.output_box1.insert(tk.END, output_text + "\n")
+
+    def __init__(self, root, doc_dict):
+
+        self.doc_dict = doc_dict
         self.root = root
         root.title("Similar Documents Retrieval System")
 
@@ -69,7 +165,8 @@ class SimpleGUI:
         self.entry.pack(pady=10)
 
         # A list of titles (for testing)
-        titles = ["Title 1", "Title 2", "Title 3"]
+        document_titles = list(doc_dict.keys())
+        titles = document_titles
 
         # Create a title Combobox
         self.title_combobox = ttk.Combobox(root, values=titles, font=("Helvetica", 14), state="readonly")
@@ -80,13 +177,37 @@ class SimpleGUI:
         self.process_button.pack(pady=15)
 
         # Output Text Box
-        self.output_label = ttk.Label(root, text="Output:", font=("Helvetica", 16))
-        self.output_label.pack()
-        self.output_box = tk.Text(root, height=15, width=60, wrap=tk.WORD, font=("Helvetica", 12))
-        self.output_box.pack(padx=10, pady=5)
+        self.output_label1 = ttk.Label(root, text="Output:", font=("Helvetica", 16))
+        self.output_label1.pack()
+        self.output_box1 = tk.Text(root, height=10, width=60, wrap=tk.WORD, font=("Helvetica", 12))
+        self.output_box1.pack(padx=10, pady=5)
+
+        # Output Text Box
+        self.output_label2 = ttk.Label(root, text="Output:", font=("Helvetica", 16))
+        self.output_label2.pack()
+        self.output_box2 = tk.Text(root, height=5, width=60, wrap=tk.WORD, font=("Helvetica", 12))
+        self.output_box2.pack(padx=10, pady=5)
+
+        # # PanedWindow for two output boxes
+        # self.paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL)
+        # self.paned_window.pack(expand=True, fill='both')
+        #
+        # # Output Text Box 1
+        # self.output_label1 = ttk.Label(self.paned_window, text="", font=("Helvetica", 16))
+        # self.output_label1.pack()
+        # self.output_box1 = tk.Text(self.paned_window, height=15, width=40, wrap=tk.WORD, font=("Helvetica", 12))
+        # self.output_box1.pack(padx=10, pady=5)
+        # self.paned_window.add(self.output_box1)
+        #
+        # # Output Text Box 2
+        # self.output_label2 = ttk.Label(self.paned_window, text="", font=("Helvetica", 16))
+        # self.output_label2.pack()
+        # self.output_box2 = tk.Text(self.paned_window, height=15, width=20, wrap=tk.WORD, font=("Helvetica", 12))
+        # self.output_box2.pack(padx=10, pady=5)
+        # self.paned_window.add(self.output_box2)
 
 
-def run_gui():
+def run_gui(doc_dict):
     root = tk.Tk()
-    app = SimpleGUI(root)
+    app = SimpleGUI(root, doc_dict)
     root.mainloop()
