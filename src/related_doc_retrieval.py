@@ -59,7 +59,7 @@ class RelatedDocumentsRetrieval:
         self._tfidf_matrix = tfidf_matrix
         return tfidf_matrix
 
-    def retrieve_similar_documents(self, query_document, by_title="", num_results=5, is_query_preprocessed=False):
+    def retrieve_similar_documents(self, query_document, query_title="", num_results=5, is_query_preprocessed=False):
         """
         Retrieve similar documents to the given query document.
         """
@@ -78,13 +78,23 @@ class RelatedDocumentsRetrieval:
         # similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
         # similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix.toarray())
         similarities = self.cosine_similarity(query_vector[0,:], tfidf_matrix)
-        similar_indices = similarities.argsort()[:max(-num_results-1, -similarities.size-1):-1]
+        # sorted indices of the most similar documents
+        similar_indices_sorted = similarities.argsort()[::-1]
+        num_results_most_similar = []
+        idx = 0
+        # get the most similar documents
+        while len(num_results_most_similar) < num_results and idx < len(similar_indices_sorted):
+            # if the document is not the query document, add it to the list of most similar documents
+            if not self.document_titles[similar_indices_sorted[idx]] == query_title:
+                num_results_most_similar.append(similar_indices_sorted[idx])
+
+            idx += 1
         # get the scores for the similar indices
-        similar_scores = similarities[similar_indices]
+        similar_scores = similarities[num_results_most_similar]
 
         # Retrieve and return the similar documents
-        similar_documents = [self.documents[i] for i in similar_indices if not self.document_titles[i] == by_title]
-        similar_documents_titles = [self.document_titles[i] for i in similar_indices if not self.document_titles[i] == by_title]
+        similar_documents = [self.documents[i] for i in num_results_most_similar if not self.document_titles[i] == query_title]
+        similar_documents_titles = [self.document_titles[i] for i in num_results_most_similar if not self.document_titles[i] == query_title]
         return similar_documents_titles, similar_documents, similar_scores
 
     @staticmethod
