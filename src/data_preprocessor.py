@@ -5,7 +5,9 @@ from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
 import nltk
 
+
 class DataPreprocessor:
+
     def __init__(self, language='english'):
         self.check_nltk_data_downloaded()
         self.stop_words = set(stopwords.words(language))
