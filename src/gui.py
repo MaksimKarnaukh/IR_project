@@ -57,6 +57,9 @@ class SimpleGUI:
     def process_input(self):
         selected_option = self.choice_var.get()
 
+        self.output_box1.delete(1.0, tk.END)
+        self.output_box2.delete(1.0, tk.END)
+
         if selected_option == "Query Sentence":
             input_text = self.entry.get()
             # check if self.num_results_entry.get() is a number in string format
