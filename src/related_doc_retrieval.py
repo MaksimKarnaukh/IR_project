@@ -56,20 +56,6 @@ class RelatedDocumentsRetrieval:
         preprocessed_documents = self.documents
         # tfidf_matrix = self.vectorizer.fit_transform(preprocessed_documents)
         tfidf_matrix: csr_matrix = self.own_vectorizer.fit_transform(preprocessed_documents)
-
-        # display(_tfidf_matrix)
-        # # _tfidf_matrix.to_csv('output/reference_dataset.csv', index=False)
-        # _tfidf_matrix.to_csv('output/cur_dataset.csv', index=False)
-        # cur_df = pd.read_csv('output/cur_dataset.csv')
-        # reference_df = pd.read_csv('output/reference_dataset.csv')
-        # # Sort columns for both DataFrames
-        # cur_df = cur_df.sort_index(axis=1)
-        # reference_df = reference_df.sort_index(axis=1)
-        # if cur_df.equals(reference_df):
-        #     print("The two matrices are equal")
-        # else:
-        #     print("The two matrices are not equal")
-
         self._tfidf_matrix = tfidf_matrix
         return tfidf_matrix
 
@@ -89,8 +75,9 @@ class RelatedDocumentsRetrieval:
         query_vector = self.own_vectorizer.transform([preprocessed_query])
 
         # Calculate cosine similarity between the query and all documents
-        # similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
-        similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix.toarray())
+        similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
+        # similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix.toarray())
+        # similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix)
 
         similar_indices = similarities.argsort()[:max(-num_results-1, -similarities.size-1):-1]
         # get the scores for the similar indices
@@ -122,20 +109,23 @@ class RelatedDocumentsRetrieval:
         :return: cosine similarity between x and each row in the document matrix y
         """
 
-        return np.dot(y, x) / (RelatedDocumentsRetrieval.l2_norm(y, axis=1) * RelatedDocumentsRetrieval.l2_norm(x))
+        # return np.dot(y, x) / (RelatedDocumentsRetrieval.l2_norm(y, axis=1) * RelatedDocumentsRetrieval.l2_norm(x))
 
-        # num_documents = y.shape[0]
-        # similarities = np.zeros(num_documents)
-        #
-        # query_norm = RelatedDocumentsRetrieval.l2_norm(x)
-        #
-        # for i in range(num_documents):
-        #     dot_product = x.dot(y[i, :].T)
-        #     document_norm = RelatedDocumentsRetrieval.l2_norm(y[i, :])
-        #
-        #     similarities[i] = dot_product / (query_norm * document_norm)
-        #
-        # return similarities
+        num_documents = y.shape[0]
+        similarities = np.zeros(num_documents)
+
+        query_norm = RelatedDocumentsRetrieval.l2_norm(x)
+
+        for i in range(num_documents):
+            dot_product = x.dot(y[i, :]) #todo check if this is correct (add .T ?)
+            document_norm = RelatedDocumentsRetrieval.l2_norm(y[i, :], axis=1)
+
+            similarities[i] = dot_product / (query_norm * document_norm)
+
+            if i % 1000 == 0:
+                print(f"Similarity {i}: ", similarities[i])
+
+        return similarities
 
 
         # dot_product = x.dot(y.T)
@@ -148,19 +138,22 @@ class RelatedDocumentsRetrieval:
 
 class OwnTfidfVectorizer:
 
-    def __init__(self, document_titles: List[str] = None):
+    def __init__(self):
         self.documents: List[str] = []
         self.document_titles: List[str] = []
-        if document_titles is not None:
-            self.document_titles = document_titles
+        # if document_titles is not None:
+        #     self.document_titles = document_titles
 
         self.all_words: List[str] = list()
         self._tfidf_matrix: pd.DataFrame = None
 
-    def fit_transform(self, documents: List[str]):
+    def fit_transform(self, documents: List[str], tfidf_matrix=None):
         self.documents = documents
         self.all_words = self.get_all_words()
-        self._tfidf_matrix = self.vectorize_documents()
+        if tfidf_matrix is None:
+            self._tfidf_matrix = self.vectorize_documents()
+        else:
+            self._tfidf_matrix = tfidf_matrix
         return self._tfidf_matrix
 
     def transform(self, query_document: List[str]):
