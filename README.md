@@ -9,7 +9,18 @@ eg. news articles about the same event as a given news item, or academic papers 
 
 Implementation is in Python and the project is structured as follows:
 
-x
+Project root:
+- **input**: contains the dataset and the ground-truth labels, a correction of the dataset will also be stored here.
+- **output**: contains the output of the system which includes the pre-processed documents and the tfidf_matrix.
+- **src**: contains the source code of the project.
+  - **main.py**: the main file of the project, this is where the gui is run from.
+  - **gui.py**: the gui of the project, this is where the user can interact with the system.
+  - **data_preprocessor.py**: the data preprocessor of the project, this is where the data is pre-processed.
+  - **related_doc_retrieval.py**: the related document retrieval system of the project, this is where the related documents are retrieved.
+  - **test.py**: the test file of the project, this is where the system is using diverse metrics against the ground truth labels.
+  - **utils.py**: the utils file of the project, this is where some useful utility functions are stored.
+  - **variables.py**: the variables file of the project, this is where the filepaths are stored.
+- **requirements.txt**: the requirements file of the project, this is where the required packages are stored.
 
 Dataset sources:
 
@@ -19,12 +30,16 @@ https://zenodo.org/records/4812962##.YK8zqqgzaUk (dataset)
 https://github.com/microsoft/SDR/blob/main/data/datasets/video_games/gt (ground-truth labels)
 
 ## Installation
-
+### Requirements
 To install the project, clone the repository and install the requirements:
 
 ```bash
 pip install -r requirements.txt
 ```
+### Tkinter
+https://www.pythonguis.com/installation/install-tkinter-linux/
+
+
 
 ## Usage
 
