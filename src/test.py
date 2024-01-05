@@ -75,11 +75,19 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
 
 def testAll():
     ground_truth_labels: dict = read_gt(variables.filepath_path_gt)
+
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
+
     documents = list(doc_dict.values())
     document_titles = list(doc_dict.keys())
+
     retrieval_system = RelatedDocumentsRetrieval(document_titles, documents)
-    retrieval_system.tfidf_matrix = retrieval_system.vectorize_documents()
+    retrieval_system_scipi = RelatedDocumentsRetrieval(document_titles, documents, use_own_vectorizer=False, use_own_cosine_similarity=False)
+    # todo test using skilearn
+    retrieval_system.initialize_tf_idf_matrix(documents)
+    retrieval_system_scipi.initialize_tf_idf_matrix(documents)
+
+
 
     metrics = {"precisions": [], "recalls": [], "F1 scores": [], "kappas": []}
     for title, similar_documents_gt in alive_it(ground_truth_labels.items(), title="Testing"):

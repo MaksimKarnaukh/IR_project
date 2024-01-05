@@ -1,3 +1,4 @@
+import os
 import time
 from typing import List, Set, Dict
 
@@ -17,6 +18,9 @@ import numpy as np
 import pandas as pd
 
 from IPython.display import display
+
+from src import variables, utils
+from src.utils import load_tfidf_matrix
 
 
 class RelatedDocumentsRetrieval:
@@ -48,7 +52,20 @@ class RelatedDocumentsRetrieval:
         """
         preprocessed_documents = [self.preprocessor.preprocess_text(doc) for doc in self.documents]
         return preprocessed_documents
-
+    def initialize_tf_idf_matrix(self, documents):
+        """
+        Initialize the TF-IDF matrix.
+        :param documents:
+        :return:
+        """
+        # check if tfidf_matrix.csv exists
+        self._tfidf_matrix = None
+        if not os.path.isfile(variables.tfidf_matrix_csv_path):
+            self._tfidf_matrix = self.vectorize_documents()
+            utils.store_tfidf_matrix(self._tfidf_matrix)
+        else:
+            self._tfidf_matrix = utils.load_tfidf_matrix()
+            self.own_vectorizer.fit_transform(documents, self._tfidf_matrix)
     def vectorize_documents(self):
         """
         Convert preprocessed documents into TF-IDF vectors.
