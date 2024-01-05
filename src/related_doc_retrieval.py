@@ -64,9 +64,6 @@ class RelatedDocumentsRetrieval:
         Convert preprocessed documents into TF-IDF vectors.
         """
         preprocessed_documents = self.documents
-
-        # tfidf_matrix = self.vectorizer.fit_transform(preprocessed_documents)
-        # tfidf_matrix: csr_matrix = self.own_vectorizer.fit_transform(preprocessed_documents)
         tfidf_matrix: csr_matrix = self.vectorizer.fit_transform(preprocessed_documents)
         return tfidf_matrix
 
