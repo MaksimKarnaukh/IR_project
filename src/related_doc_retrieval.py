@@ -9,8 +9,6 @@ from data_preprocessor import DataPreprocessor
 from collections import Counter
 import math
 
-# import pretty print
-from pprint import pprint
 
 from scipy.sparse import csr_matrix
 
@@ -29,15 +27,9 @@ class RelatedDocumentsRetrieval:
         self.documents: List[str] = documents
 
         if use_own_vectorizer:
-            # todo remove
-            # self.vectorizer: TfidfVectorizer = TfidfVectorizer()
-            # self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
             self.vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
         else:
             self.vectorizer: TfidfVectorizer = TfidfVectorizer()
-            # # todo remove
-            # self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
-
         if use_own_cosine_similarity:
             self.cosine_similarity = self.cosineSimularity
         else:
@@ -53,7 +45,7 @@ class RelatedDocumentsRetrieval:
         preprocessed_documents = [self.preprocessor.preprocess_text(doc) for doc in self.documents]
         return preprocessed_documents
 
-    def initialize_tf_idf_matrix(self, documents):
+    def initialize_tf_idf_matrix(self, documents, force_rerun=False):
         """
         Initialize the TF-IDF matrix.
         :param documents:
@@ -65,7 +57,10 @@ class RelatedDocumentsRetrieval:
             tfidf_matrix = self.vectorizer.fit_transform(documents)
             self._tfidf_matrix = tfidf_matrix
         else:
-            if not os.path.isfile(variables.tfidf_matrix_csv_path):
+            if force_rerun:
+                self._tfidf_matrix = self.vectorize_documents()
+
+            elif not os.path.isfile(variables.tfidf_matrix_csv_path):
                 self._tfidf_matrix = self.vectorize_documents()
                 utils.store_tfidf_matrix(self._tfidf_matrix)
             else:
@@ -368,6 +363,9 @@ def testCosineSimularity():
     for id,i in enumerate(cosim):
         assert abs(i - expected[id]) < 0.0000001
 
+
+
+def testSimilarDocuments():
     l = ['data science is one of the most important fields of science',
      'this is one of the best data science courses',
      'data scientists analyze data']
@@ -378,31 +376,12 @@ def testCosineSimularity():
     documents = l
 
     retrieval_system = RelatedDocumentsRetrieval(document_titles, documents)
-    tfidf_matrix = retrieval_system.vectorize_documents()
+    retrieval_system.initialize_tf_idf_matrix(documents, force_rerun=True)
 
     similar_documents_titles, similar_documents, scores = retrieval_system.retrieve_similar_documents(q[0], "", 5, is_query_preprocessed=True)
     assert similar_documents_titles == ['doc3', 'doc2', 'doc1']
 
 
-
 if __name__ == '__main__':
     testCosineSimularity()
-    # documents = [
-    #     "In the game, players have the choice to compete across any of the game modes.",
-    #     "Gameplay involves teams of five players on indoor courts.",
-    #     "The game was created by the team that later worked on Aero Fighters franchise.",
-    #     "Power Spikes II received mixed reception from critics.",
-    #     "Development involved collaboration with various designers and composers."
-    # ]
-    #
-    # retrieval_system = RelatedDocumentsRetrieval(documents)
-    # preprocessed_documents = retrieval_system.preprocess_documents()
-    # retrieval_system._tfidf_matrix = retrieval_system.vectorize_documents(preprocessed_documents)
-    #
-    # query_document = "Players compete in various game modes."
-    # similar_documents = retrieval_system.retrieve_similar_documents(query_document)
-    #
-    # print("Query Document:", query_document)
-    # print("Similar Documents:")
-    # for i, doc in enumerate(similar_documents, 1):
-    #     print(f"{i}. {doc}")
+    testSimilarDocuments()
