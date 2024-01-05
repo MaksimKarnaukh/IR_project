@@ -224,8 +224,6 @@ class OwnTfidfVectorizer:
         return list(sorted(words))
 
 
-        return list(set(word for doc in self.documents for word in doc.split()))
-
     def calculate_tfidf(self):
         """
         Multiply TF and IDF for each word in each document.
