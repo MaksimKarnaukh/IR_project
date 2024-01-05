@@ -124,6 +124,27 @@ class RelatedDocumentsRetrieval:
 
         return np.dot(y, x) / (RelatedDocumentsRetrieval.l2_norm(y, axis=1) * RelatedDocumentsRetrieval.l2_norm(x))
 
+        # num_documents = y.shape[0]
+        # similarities = np.zeros(num_documents)
+        #
+        # query_norm = RelatedDocumentsRetrieval.l2_norm(x)
+        #
+        # for i in range(num_documents):
+        #     dot_product = x.dot(y[i, :].T)
+        #     document_norm = RelatedDocumentsRetrieval.l2_norm(y[i, :])
+        #
+        #     similarities[i] = dot_product / (query_norm * document_norm)
+        #
+        # return similarities
+
+
+        # dot_product = x.dot(y.T)
+        # norm_x = np.sqrt(x.power(2).sum(axis=1))
+        # norm_y = np.sqrt(y.power(2).sum(axis=1))
+        #
+        # similarity = dot_product / (norm_x.dot(norm_y.T))
+        # return similarity
+
 
 class OwnTfidfVectorizer:
 
