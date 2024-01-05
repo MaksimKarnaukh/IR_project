@@ -42,6 +42,7 @@ To install the project, clone the repository and install the requirements:
 pip install -r requirements.txt
 ```
 ### Tkinter
+To install Tkinter, follow the instructions on the following website:
 https://www.pythonguis.com/installation/install-tkinter-linux/
 
 
