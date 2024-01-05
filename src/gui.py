@@ -22,7 +22,9 @@ class SimpleGUI:
         if by_title:
             title = query
             d = read_gt(variables.filepath_path_gt)  # Read ground truth
-            print(d[title])
+
+            if title not in d.keys():
+                return similar_documents_titles, similar_documents
 
             expected = list(d[title].keys())
             par = calculatePrecisionAndRecall(expected, similar_documents_titles)
@@ -69,11 +71,8 @@ class SimpleGUI:
             result = self.return_similar_documents(self.doc_dict, input_text, by_title=False, num_results=num_results)
             if len(result) == 4:
                 similar_documents_titles, similar_documents, par0, par1 = result
-                # output_text1 = f"Query Sentence: {input_text}\n" \
-                #               f"Precision: {par0}\n" \
-                #               f"Recall: {par1}\n" \
-                #               f"Similar Documents:\n"
-                output_text1 = f"Similar Documents:\n"
+
+                output_text1 = ""
                 output_text2 = f"Precision: {par0}\n" \
                                f"Recall: {par1}\n"
 
@@ -103,11 +102,8 @@ class SimpleGUI:
                 result = self.return_similar_documents(self.doc_dict, selected_title, by_title=True, num_results=num_results)
                 if len(result) == 4:
                     similar_documents_titles, similar_documents, par0, par1 = result
-                    # output_text1 = f"Title: {selected_title}\n" \
-                    #               f"Precision: {par0}\n" \
-                    #               f"Recall: {par1}\n" \
-                    #               f"Similar Documents:\n"
-                    output_text1 = f"Similar Documents:\n"
+                    print(result)
+                    output_text1 = ""
                     output_text2 = f"Precision: {par0}\n" \
                                    f"Recall: {par1}\n"
                     for i, doc in enumerate(similar_documents_titles, 1):
@@ -116,10 +112,12 @@ class SimpleGUI:
                     self.output_box2.insert(tk.END, output_text2 + "\n")
                 else:
                     similar_documents_titles, similar_documents = result
-                    output_text1 = f"Similar Documents:\n"
+                    output_text1 = f""
+                    output_text2 = f"Title not found in ground truth."
                     for i, doc in enumerate(similar_documents_titles, 1):
                         output_text1 += f"{i}. {doc}\n"
                     self.output_box1.insert(tk.END, output_text1 + "\n")
+                    self.output_box2.insert(tk.END, output_text2 + "\n")
 
                 # output_text = f"You selected the title: {selected_title}"
                 # self.output_box1.insert(tk.END, output_text + "\n")
