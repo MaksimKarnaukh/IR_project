@@ -30,12 +30,13 @@ class RelatedDocumentsRetrieval:
 
         if use_own_vectorizer:
             # todo remove
-            self.vectorizer: TfidfVectorizer = TfidfVectorizer()
-            self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
+            # self.vectorizer: TfidfVectorizer = TfidfVectorizer()
+            # self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
+            self.vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
         else:
             self.vectorizer: TfidfVectorizer = TfidfVectorizer()
-            # todo remove
-            self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
+            # # todo remove
+            # self.own_vectorizer: OwnTfidfVectorizer = OwnTfidfVectorizer()
 
         if use_own_cosine_similarity:
             self.cosine_similarity = self.cosineSimularity
@@ -45,13 +46,13 @@ class RelatedDocumentsRetrieval:
         self.preprocessor: DataPreprocessor = DataPreprocessor()
         self._tfidf_matrix: csr_matrix = None
 
-
     def preprocess_documents(self):
         """
         Preprocess all documents in the collection.
         """
         preprocessed_documents = [self.preprocessor.preprocess_text(doc) for doc in self.documents]
         return preprocessed_documents
+
     def initialize_tf_idf_matrix(self, documents):
         """
         Initialize the TF-IDF matrix.
@@ -60,20 +61,27 @@ class RelatedDocumentsRetrieval:
         """
         # check if tfidf_matrix.csv exists
         self._tfidf_matrix = None
-        if not os.path.isfile(variables.tfidf_matrix_csv_path):
-            self._tfidf_matrix = self.vectorize_documents()
-            utils.store_tfidf_matrix(self._tfidf_matrix)
+        if isinstance(self.vectorizer, TfidfVectorizer):
+            tfidf_matrix = self.vectorizer.fit_transform(documents)
+            self._tfidf_matrix = tfidf_matrix
         else:
-            self._tfidf_matrix = utils.load_tfidf_matrix()
-            self.own_vectorizer.fit_transform(documents, self._tfidf_matrix)
+            if not os.path.isfile(variables.tfidf_matrix_csv_path):
+                self._tfidf_matrix = self.vectorize_documents()
+                utils.store_tfidf_matrix(self._tfidf_matrix)
+            else:
+                self._tfidf_matrix = utils.load_tfidf_matrix()
+                # self.own_vectorizer.fit_transform(documents, self._tfidf_matrix)
+                self.vectorizer.fit_transform(documents, self._tfidf_matrix)
+
     def vectorize_documents(self):
         """
         Convert preprocessed documents into TF-IDF vectors.
         """
         preprocessed_documents = self.documents
+
         # tfidf_matrix = self.vectorizer.fit_transform(preprocessed_documents)
-        tfidf_matrix: csr_matrix = self.own_vectorizer.fit_transform(preprocessed_documents)
-        self._tfidf_matrix = tfidf_matrix
+        # tfidf_matrix: csr_matrix = self.own_vectorizer.fit_transform(preprocessed_documents)
+        tfidf_matrix: csr_matrix = self.vectorizer.fit_transform(preprocessed_documents)
         return tfidf_matrix
 
     def retrieve_similar_documents(self, query_document, query_title="", num_results=5, is_query_preprocessed=False):
@@ -89,12 +97,19 @@ class RelatedDocumentsRetrieval:
 
         # Vectorize the query document
         # query_vector = self.vectorizer.transform([preprocessed_query])
-        query_vector = self.own_vectorizer.transform([preprocessed_query])
+        # query_vector = self.own_vectorizer.transform([preprocessed_query])
+        query_vector = self.vectorizer.transform([preprocessed_query])
 
         # Calculate cosine similarity between the query and all documents
         # similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
         # similarities = self.cosine_similarity(query_vector.toarray()[0], tfidf_matrix.toarray())
-        similarities = self.cosine_similarity(query_vector[0,:], tfidf_matrix)
+
+        similarities = None
+        if self.cosine_similarity == self.cosineSimularity:
+            similarities = self.cosine_similarity(query_vector[0, :], tfidf_matrix)
+        else:
+            similarities = sklearn_cosine_similarity(query_vector, tfidf_matrix).flatten()
+
         # sorted indices of the most similar documents
         similar_indices_sorted = similarities.argsort()[::-1]
         num_results_most_similar = []
@@ -126,6 +141,7 @@ class RelatedDocumentsRetrieval:
         # s = np.sum(sq, axis=axis)
         # sqrt = np.sqrt(s)
         return norm(vector, 2, axis=axis)
+
     @staticmethod
     def l2_norm_original(vector, axis=0):
         """
@@ -137,6 +153,7 @@ class RelatedDocumentsRetrieval:
         s = np.sum(sq, axis=axis)
         sqrt = np.sqrt(s)
         return sqrt
+
     @staticmethod
     def cosineSimilarityOriginal(x:csr_matrix, y:csr_matrix):
         """

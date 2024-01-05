@@ -82,32 +82,32 @@ def testAll():
     document_titles = list(doc_dict.keys())
 
     retrieval_system = RelatedDocumentsRetrieval(document_titles, documents)
-    retrieval_system_scipi = RelatedDocumentsRetrieval(document_titles, documents, use_own_vectorizer=False, use_own_cosine_similarity=False)
-    # todo test using skilearn
     retrieval_system.initialize_tf_idf_matrix(documents)
+
+    retrieval_system_scipi = RelatedDocumentsRetrieval(document_titles, documents, use_own_vectorizer=False,
+                                                       use_own_cosine_similarity=False)
     retrieval_system_scipi.initialize_tf_idf_matrix(documents)
 
-
-
-    metrics = {"precisions": [], "recalls": [], "F1 scores": [], "kappas": []}
-    for title, similar_documents_gt in alive_it(ground_truth_labels.items(), title="Testing"):
-        query_document = doc_dict[title]
-        similar_documents_titles, similar_documents, scores = retrieval_system.retrieve_similar_documents(query_document, title, 10)
-        score_dict = dict(zip(similar_documents_titles, scores))
-        par = calculatePrecisionAndRecall(similar_documents_gt, similar_documents_titles)
-        metrics["precisions"].append(par[0])
-        metrics["recalls"].append(par[1])
-        F1 = calculateF1score(par[0], par[1])
-        metrics["F1 scores"].append(F1)
-        ones = [1] * len(similar_documents_gt)
-        scored_gt = dict(zip(similar_documents_gt, ones))
-        kappa = calculateKappa(scored_gt, score_dict, nr_of_docs=len(documents))
-        metrics["kappas"].append(kappa)
-    print('\n')
-    print("Average precision: ", sum(metrics["precisions"])/len(metrics["precisions"]))
-    print("Average recall: ", sum(metrics["recalls"])/len(metrics["recalls"]))
-    print("Average F1 score: ", sum(metrics["F1 scores"])/len(metrics["F1 scores"]))
-    print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
+    for retrievalsystem in [retrieval_system, retrieval_system_scipi]:
+        metrics = {"precisions": [], "recalls": [], "F1 scores": [], "kappas": []}
+        for title, similar_documents_gt in alive_it(ground_truth_labels.items(), title="Testing"):
+            query_document = doc_dict[title]
+            similar_documents_titles, similar_documents, scores = retrievalsystem.retrieve_similar_documents(query_document, title, 10)
+            score_dict = dict(zip(similar_documents_titles, scores))
+            par = calculatePrecisionAndRecall(similar_documents_gt, similar_documents_titles)
+            metrics["precisions"].append(par[0])
+            metrics["recalls"].append(par[1])
+            F1 = calculateF1score(par[0], par[1])
+            metrics["F1 scores"].append(F1)
+            ones = [1] * len(similar_documents_gt)
+            scored_gt = dict(zip(similar_documents_gt, ones))
+            kappa = calculateKappa(scored_gt, score_dict, nr_of_docs=len(documents))
+            metrics["kappas"].append(kappa)
+        print('\n')
+        print("Average precision: ", sum(metrics["precisions"])/len(metrics["precisions"]))
+        print("Average recall: ", sum(metrics["recalls"])/len(metrics["recalls"]))
+        print("Average F1 score: ", sum(metrics["F1 scores"])/len(metrics["F1 scores"]))
+        print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
 
 if __name__ == '__main__':
     # d = read_gt(variables.filepath_path_gt)  # Read ground truth
