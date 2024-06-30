@@ -1,4 +1,4 @@
-## Project Description
+# PyLucene Installation Guide
 
 This is a quick guide on how to get pyLucene up and running on ubuntu.
 
