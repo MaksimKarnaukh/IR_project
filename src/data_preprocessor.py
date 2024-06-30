@@ -85,4 +85,3 @@ class DataPreprocessor:
             if new_token != '':
                 new_tokens.append(new_token)
         return new_tokens
-
