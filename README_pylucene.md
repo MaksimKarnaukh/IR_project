@@ -41,7 +41,7 @@ sudo ln -s /usr/lib/jvm/java-11-openjdk-amd64/lib/server/libjvm.so /usr/lib/libj
 After that, run the following commands:
 
 ```bash
-python3 setup.py build
+sudo python3 setup.py build
 sudo python3 setup.py install
 ```
 
