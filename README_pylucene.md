@@ -13,7 +13,7 @@ sudo apt-get install openjdk-11-jdk ant build-essential python3-dev python3-dist
 
 ### JCC
 
-If you're not using project's pylucene folder at `libs/pylucene-9.10.0/`, download pylucene 9.10.0 from [here](https://dlcdn.apache.org/lucene/pylucene/?C=M;O=A).
+Download pylucene 9.10.0 from [here](https://dlcdn.apache.org/lucene/pylucene/?C=M;O=A) and place it somewhere, e.g. the libs folder.
 Ensure there is a Makefile in the `pylucene-9.10.0/` folder.
 
 ```bash
