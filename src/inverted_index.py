@@ -3,16 +3,23 @@ import heapq
 import struct
 from collections import defaultdict
 import pickle
+import math
+from src import variables
 
+DEFAULT_BLOCK_SIZE_LIMIT = 10000
 
 class SPIMI:
-    def __init__(self, block_size_limit=10000, output_dir="../output/spimi_output"):
+    def __init__(self, block_size_limit=DEFAULT_BLOCK_SIZE_LIMIT, output_dir=variables.inverted_index_folder):
         self.block_size_limit = block_size_limit
         self.output_dir = output_dir
         self.block_num = 0
         self.dictionary = dict() # {term: {doc_id: freq}}
         self.token_count = 0
         self.term_positions = {}  # {term: offset}
+
+        self.doc_lengths = defaultdict(int)  # {doc_id: doc_length}
+        self.doc_count = 0  # total number of documents
+
         os.makedirs(self.output_dir, exist_ok=True)
 
     # function for writing the term and postings to disk
@@ -32,12 +39,8 @@ class SPIMI:
         with open(block_filename, 'wb') as f:
             sorted_terms = sorted(self.dictionary.items())
             for term, postings in sorted_terms:
-                term_bytes = term.encode('utf-8')
-                postings_bytes = pickle.dumps(dict(postings))
-                f.write(struct.pack('I', len(term_bytes)))
-                f.write(term_bytes)
-                f.write(struct.pack('I', len(postings_bytes)))
-                f.write(postings_bytes)
+                self.write_index_entry(term, postings, f)
+
         self.block_num += 1
         self.dictionary = dict()
         self.token_count = 0
@@ -81,33 +84,13 @@ class SPIMI:
         with open(merged_block_filename, 'wb') as f:
             offset = f.tell()
             for term, postings in merged_index.items():
-                term_bytes = term.encode('utf-8')
-                postings_bytes = pickle.dumps(dict(postings))
-                f.write(struct.pack('I', len(term_bytes)))
-                f.write(term_bytes)
-                f.write(struct.pack('I', len(postings_bytes)))
-                f.write(postings_bytes)
+                self.write_index_entry(term, postings, f)
                 if is_last_merge:
                     self.term_positions[term] = offset
                     offset = f.tell()
 
         self.block_num += 1
         return merged_block_filename
-
-    # def merge_blocks(self, block_files):
-    #     while len(block_files) > 1:
-    #         new_block_files = []
-    #
-    #         for i in range(0, len(block_files), 2):
-    #             if i + 1 < len(block_files):
-    #                 merged_block = self.merge_two_blocks(block_files[i], block_files[i + 1])
-    #                 new_block_files.append(merged_block)
-    #             else:
-    #                 new_block_files.append(block_files[i])
-    #
-    #         block_files = new_block_files
-    #
-    #     return block_files[0]
 
     def merge_blocks(self, block_files, delete_merged_blocks=True):
         while len(block_files) > 1:
@@ -134,7 +117,7 @@ class SPIMI:
         block_files = []
 
         for term, doc_id in token_stream:
-
+            self.doc_count = max(self.doc_count, doc_id + 1)
             if term not in self.dictionary:
 
                 if self.token_count + 1 > self.block_size_limit:
@@ -147,6 +130,7 @@ class SPIMI:
                 self.dictionary[term][doc_id] = 0
 
             self.dictionary[term][doc_id] += 1
+            self.doc_lengths[doc_id] += 1 ###
 
         if self.token_count > 0:
             block_files.append(self.write_block_to_disk())
@@ -168,6 +152,58 @@ class SPIMI:
                 return postings
         else:
             return None
+
+    def save_term_positions(self):
+        try:
+            term_positions_file = os.path.join(self.output_dir, 'term_positions.bin')
+            with open(term_positions_file, 'wb') as f:
+                pickle.dump(self.term_positions, f)
+        except Exception as e:
+            print(f"Error saving term positions to disk: {e}")
+
+    def load_term_positions(self):
+        try:
+            term_positions_file = os.path.join(self.output_dir, 'term_positions.bin')
+            if os.path.exists(term_positions_file):
+                with open(term_positions_file, 'rb') as f:
+                    self.term_positions = pickle.load(f)
+            else:
+                self.term_positions = {}
+        except Exception as e:
+            print(f"Error loading term positions from disk: {e}")
+
+    def compute_idf(self, term):
+        postings = self.get_posting_list(term)
+        if postings:
+            doc_freq = len(postings)
+            return math.log(self.doc_count / doc_freq)
+        else:
+            return 0.0
+
+    def compute_tf(self, term, doc_id):
+        postings = self.get_posting_list(term)
+        if postings and doc_id in postings:
+            return 1 + math.log(postings[doc_id])
+        else:
+            return 0.0
+
+    def fast_cosine_score(self, query_terms, K=10):
+        Scores = defaultdict(float)
+
+        for term in query_terms:
+            idf = self.compute_idf(term)
+            postings = self.get_posting_list(term)
+
+            if postings:
+                for doc_id, tf in postings.items():
+                    Scores[doc_id] += self.compute_tf(term, doc_id) * idf
+
+        for doc_id in Scores:
+            Scores[doc_id] /= self.doc_lengths[doc_id] # /= math.sqrt(self.doc_lengths[doc_id])
+
+        top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
+
+        return top_K_docs
 
 
 def generate_token_stream(documents):
@@ -330,3 +366,15 @@ if __name__ == "__main__":
     term = "then"
     postings = spimi.get_posting_list(term)
     print(f"\nPosting list for term '{term}': {postings}")
+
+    # Test saving and loading term positions
+    spimi.save_term_positions()
+    spimi.load_term_positions()
+    term = "cat"
+    postings = spimi.get_posting_list(term)
+    print(f"\nPosting list for term '{term}': {postings}")
+
+    # Perform ranked retrieval with cosine similarity
+    query = ["then", "cat"]
+    top_docs = spimi.fast_cosine_score(query, K=4)
+    print(f"\nTop documents for query '{query}': {top_docs}")
