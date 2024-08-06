@@ -199,8 +199,6 @@ class SPIMI:
         final_index_filename: str = os.path.join(self.output_dir, 'inverted_index.bin')
         os.rename(final_block, final_index_filename)
 
-        self.save_mapping(self.idf_values, 'idf.bin')
-
         return final_index_filename
 
     # def compute_all_idf(self):
@@ -246,6 +244,8 @@ class SPIMI:
 
         final_index_filename: str = self.merge_blocks(block_files)
 
+        self.save_index_data()
+
         return final_index_filename
 
     def get_posting_list(self, term: str) -> Dict[int, int] | None:
@@ -271,30 +271,49 @@ class SPIMI:
         else:
             return None
 
-    def save_mapping(self, dictionary: Dict[str, int | float], file_name: str):
+    def save_index_data(self):
+        """
+        Save index data to disk.
+        """
+        self.save_mapping(self.term_positions, 'term_positions.bin')
+        self.save_mapping(self.idf_values, 'idf.bin')
+        self.save_mapping(dict(self.doc_lengths), 'doc_lengths.bin')
+        self.save_mapping({'doc_count': self.doc_count}, 'doc_count.bin')
+
+    def load_index_data(self):
+        """
+        Load index data from disk.
+        """
+        self.term_positions = self.load_mapping('term_positions.bin')
+        self.idf_values = self.load_mapping('idf.bin')
+        self.doc_lengths = self.load_mapping('doc_lengths.bin')
+        self.doc_count = self.load_mapping('doc_count.bin').get('doc_count', 0)
+
+    def save_mapping(self, dictionary: Dict[Any, Any], file_name: str):
         """
         Save mapping to disk.
         """
         try:
-            term_positions_file = os.path.join(self.output_dir, file_name)
-            with open(term_positions_file, 'wb') as f:
+            _file = os.path.join(self.output_dir, file_name)
+            with open(_file, 'wb') as f:
                 pickle.dump(dictionary, f)
         except Exception as e:
-            print(f"Error saving term positions to disk: {e}")
+            print(f"Error saving mapping to disk: {e}")
 
     def load_mapping(self, file_name: str):
         """
         Load term positions from disk.
         """
         try:
-            term_positions_file = os.path.join(self.output_dir, file_name)
-            if os.path.exists(term_positions_file):
-                with open(term_positions_file, 'rb') as f:
+            _file = os.path.join(self.output_dir, file_name)
+            if os.path.exists(_file):
+                with open(_file, 'rb') as f:
                     return pickle.load(f)
             else:
+                print(f"File {_file} does not exist.")
                 return {}
         except Exception as e:
-            print(f"Error loading term positions from disk: {e}")
+            print(f"Error loading mapping from disk: {e}")
 
     def compute_idf(self, postings):
         if postings:
