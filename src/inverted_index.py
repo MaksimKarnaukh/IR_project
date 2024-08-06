@@ -22,6 +22,7 @@ class SPIMI:
         term_positions (Dict[str, int]): mapping of term positions in the index file.
         doc_lengths (Dict[int, int]): Dictionary of document lengths.
         doc_count (int): Total number of documents.
+        idf_values (Dict[str, float]): Dictionary of IDF values for terms.
 
     Args:
         block_size_limit (int): Maximum number of tokens in a block before writing to disk.
@@ -59,6 +60,8 @@ class SPIMI:
 
         self.doc_lengths: Dict[int, int] = defaultdict(int)  # {doc_id: doc_length}
         self.doc_count: int = 0  # total number of documents
+
+        self.idf_values: Dict[str, float] = {}  # {term: idf_value}
 
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -161,7 +164,8 @@ class SPIMI:
                 self.write_index_entry(term, postings, f)
                 if is_last_merge:
                     self.term_positions[term] = offset
-                    offset = f.tell()
+                    self.idf_values[term] = self.compute_idf(postings)
+                offset = f.tell()
 
         self.block_num += 1
         return merged_block_filename
@@ -194,7 +198,20 @@ class SPIMI:
         final_block: str = block_files[0]
         final_index_filename: str = os.path.join(self.output_dir, 'inverted_index.bin')
         os.rename(final_block, final_index_filename)
+
+        self.save_mapping(self.idf_values, 'idf.bin')
+
         return final_index_filename
+
+    # def compute_all_idf(self):
+    #     """
+    #     Compute the IDF values for all terms in the final merged index.
+    #     """
+    #     for term, offset in self.term_positions.items():
+    #         postings = self.get_posting_list(term)
+    #         if postings:
+    #             self.idf_values[term] = math.log(self.doc_count / len(postings))
+    #     self.save_mapping(self.idf_values, 'idf.bin')
 
     def spimi_invert(self, token_stream: List[Tuple[str, int]] | Generator[tuple[Any, int], Any, None]) -> str:
         """
@@ -222,7 +239,7 @@ class SPIMI:
                 self.dictionary[term][doc_id] = 0
 
             self.dictionary[term][doc_id] += 1
-            self.doc_lengths[doc_id] += 1 ###
+            self.doc_lengths[doc_id] += 1
 
         if self.token_count > 0:
             block_files.append(self.write_block_to_disk())
@@ -254,36 +271,34 @@ class SPIMI:
         else:
             return None
 
-    def save_term_positions(self):
+    def save_mapping(self, dictionary: Dict[str, int | float], file_name: str):
         """
-        Save term positions to disk.
+        Save mapping to disk.
         """
         try:
-            term_positions_file = os.path.join(self.output_dir, 'term_positions.bin')
+            term_positions_file = os.path.join(self.output_dir, file_name)
             with open(term_positions_file, 'wb') as f:
-                pickle.dump(self.term_positions, f)
+                pickle.dump(dictionary, f)
         except Exception as e:
             print(f"Error saving term positions to disk: {e}")
 
-    def load_term_positions(self):
+    def load_mapping(self, file_name: str):
         """
         Load term positions from disk.
         """
         try:
-            term_positions_file = os.path.join(self.output_dir, 'term_positions.bin')
+            term_positions_file = os.path.join(self.output_dir, file_name)
             if os.path.exists(term_positions_file):
                 with open(term_positions_file, 'rb') as f:
-                    self.term_positions = pickle.load(f)
+                    return pickle.load(f)
             else:
-                self.term_positions = {}
+                return {}
         except Exception as e:
             print(f"Error loading term positions from disk: {e}")
 
-    def compute_idf(self, term):
-        postings = self.get_posting_list(term)
+    def compute_idf(self, postings):
         if postings:
-            doc_freq = len(postings)
-            return math.log(self.doc_count / doc_freq)
+            return math.log(self.doc_count / len(postings))
         else:
             return 0.0
 
@@ -308,7 +323,7 @@ class SPIMI:
         Scores = defaultdict(float)
 
         for term in query_terms:
-            idf = self.compute_idf(term)
+            idf = self.idf_values.get(term, 0.0)
             postings = self.get_posting_list(term)
 
             if postings:
@@ -352,7 +367,7 @@ def merge_dicts(c1: Dict[int, int], c2: Dict[int, int]) -> Dict[int, int]:
     c1 = {k: int(v) for k, v in c1.items()}
     c2 = {k: int(v) for k, v in c2.items()}
 
-    # defaultdict to simplify the addition logic
+    # using default dict to simplify the addition logic
     merged_dict = defaultdict(int, c1)
     for k, v in c2.items():
         merged_dict[k] += v
@@ -487,7 +502,7 @@ if __name__ == "__main__":
 
     # print contents of all binary files in the output/spimi_output directory
     for file in os.listdir('../output/spimi_output'):
-        if file.endswith(".bin"):
+        if file.endswith("index.bin"):
             print("-----\n")
             print("\nfile:", file)
             print_block_file(os.path.join('../output/spimi_output', file))
@@ -503,8 +518,8 @@ if __name__ == "__main__":
     print(f"\nPosting list for term '{term_}': {postings_}")
 
     # Test saving and loading term positions
-    spimi.save_term_positions()
-    spimi.load_term_positions()
+    spimi.save_mapping(spimi.term_positions, 'term_positions.bin')
+    spimi.term_positions = spimi.load_mapping('term_positions.bin')
     term_ = "cat"
     postings_ = spimi.get_posting_list(term_)
     print(f"\nPosting list for term '{term_}': {postings_}")
