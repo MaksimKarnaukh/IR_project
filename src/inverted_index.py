@@ -8,6 +8,8 @@ import time
 from src import variables
 from typing import List, Tuple, Dict, BinaryIO, Generator, Any
 
+from src.utils import getDocDict
+
 DEFAULT_BLOCK_SIZE_LIMIT = 10000
 
 class SPIMI:
@@ -603,31 +605,40 @@ if __name__ == "__main__":
         spimi = SPIMI(block_size_limit=10000)
         spimi.load_index_data()
 
-    # print contents of all binary files in the output/spimi_output directory
-    for file in os.listdir('../output/spimi_output'):
-        if file.endswith("index.bin"):
-            print("-----\n")
-            print("\nfile:", file)
-            print_block_file(os.path.join('../output/spimi_output', file))
-            print("-----\n")
-
-    # Print contents of the final index file
-    print("\nFinal index contents:")
-    print_block_file(final_index_filename_)
-
-    # Test retrieving the posting list for a term
-    term_ = "then"
-    postings_ = spimi.get_posting_list(term_)
-    print(f"\nPosting list for term '{term_}': {postings_}")
-
-    # Test saving and loading term positions
-    spimi.save_mapping(spimi.term_positions, 'term_positions.bin')
-    spimi.term_positions = spimi.load_mapping('term_positions.bin')
-    term_ = "cat"
-    postings_ = spimi.get_posting_list(term_)
-    print(f"\nPosting list for term '{term_}': {postings_}")
-
-    # Perform ranked retrieval with cosine similarity
-    query_ = ["then", "cat"]
-    top_docs = spimi.fast_cosine_score(query_, K=4)
+    query_ = documents[9000]
+    start_time = time.time()
+    top_docs = spimi.fast_cosine_score(query_, K=10)
+    print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
     print(f"\nTop documents for query '{query_}': {top_docs}")
+
+    for doc in top_docs:
+        print(document_titles[doc[0]])
+
+    # # print contents of all binary files in the output/spimi_output directory
+    # for file in os.listdir('../output/spimi_output'):
+    #     if file.endswith("index.bin"):
+    #         print("-----\n")
+    #         print("\nfile:", file)
+    #         print_block_file(os.path.join('../output/spimi_output', file))
+    #         print("-----\n")
+    #
+    # # Print contents of the final index file
+    # print("\nFinal index contents:")
+    # print_block_file(final_index_filename_)
+    #
+    # # Test retrieving the posting list for a term
+    # term_ = "then"
+    # postings_ = spimi.get_posting_list(term_)
+    # print(f"\nPosting list for term '{term_}': {postings_}")
+    #
+    # # Test saving and loading term positions
+    # spimi.save_mapping(spimi.term_positions, 'term_positions.bin')
+    # spimi.term_positions = spimi.load_mapping('term_positions.bin')
+    # term_ = "cat"
+    # postings_ = spimi.get_posting_list(term_)
+    # print(f"\nPosting list for term '{term_}': {postings_}")
+    #
+    # # Perform ranked retrieval with cosine similarity
+    # query_ = ["then", "cat"]
+    # top_docs = spimi.fast_cosine_score(query_, K=4)
+    # print(f"\nTop documents for query '{query_}': {top_docs}")
