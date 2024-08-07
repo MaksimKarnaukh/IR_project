@@ -4,6 +4,7 @@ import struct
 from collections import defaultdict
 import pickle
 import math
+import time
 from src import variables
 from typing import List, Tuple, Dict, BinaryIO, Generator, Any
 
@@ -17,7 +18,7 @@ class SPIMI:
         block_size_limit (int): Maximum number of tokens in a block before writing to disk.
         output_dir (str): Directory where the index file(s) are stored.
         block_num (int): Number of blocks written to disk.
-        dictionary (Dict[str, Dict[int, int]]): Dictionary of terms and their postings.
+        dictionary (Dict[str, Dict[int, float]]): Dictionary of terms and their postings.
         token_count (int): Number of tokens in the current block.
         term_positions (Dict[str, int]): mapping of term positions in the index file.
         doc_lengths (Dict[int, int]): Dictionary of document lengths.
@@ -54,18 +55,19 @@ class SPIMI:
         self.block_size_limit: int = block_size_limit
         self.output_dir: str = output_dir
         self.block_num: int = 0
-        self.dictionary: Dict[str, Dict[int, int]] = dict() # {term: {doc_id: freq}}
+        self.dictionary: Dict[str, Dict[int, float]] = dict() # {term: {doc_id: freq}}
         self.token_count: int = 0
         self.term_positions: Dict[str, int] = {}  # {term: offset}
 
         self.doc_lengths: Dict[int, int] = defaultdict(int)  # {doc_id: doc_length}
+        self.doc_lengths_n: Dict[int, float] = defaultdict(float)  # {doc_id: normalized_doc_length}
         self.doc_count: int = 0  # total number of documents
 
         self.idf_values: Dict[str, float] = {}  # {term: idf_value}
 
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def write_index_entry(self, term: str, postings: Dict[int, int], f: BinaryIO):
+    def write_index_entry(self, term: str, postings: Dict[int, float], f: BinaryIO):
         """
         Write a term and its postings list to a file.
 
@@ -134,7 +136,7 @@ class SPIMI:
         Returns:
             str: The filename of the merged block file.
         """
-        merged_index: Dict[str, Dict[int, int]] = defaultdict(dict)
+        merged_index: Dict[str, Dict[int, float]] = defaultdict(dict)
 
         f1: BinaryIO = open(block_file1, 'rb')
         f2: BinaryIO = open(block_file2, 'rb')
@@ -161,10 +163,13 @@ class SPIMI:
         with open(merged_block_filename, 'wb') as f:
             offset = f.tell()
             for term, postings in merged_index.items():
-                self.write_index_entry(term, postings, f)
                 if is_last_merge:
+                    for doc_id, tf in postings.items():
+                        postings[doc_id] = self.compute_tf(tf)
                     self.term_positions[term] = offset
-                    self.idf_values[term] = self.compute_idf(postings)
+                    self.idf_values[term] = self.compute_idf(len(postings))
+
+                self.write_index_entry(term, postings, f)
                 offset = f.tell()
 
         self.block_num += 1
@@ -201,16 +206,6 @@ class SPIMI:
 
         return final_index_filename
 
-    # def compute_all_idf(self):
-    #     """
-    #     Compute the IDF values for all terms in the final merged index.
-    #     """
-    #     for term, offset in self.term_positions.items():
-    #         postings = self.get_posting_list(term)
-    #         if postings:
-    #             self.idf_values[term] = math.log(self.doc_count / len(postings))
-    #     self.save_mapping(self.idf_values, 'idf.bin')
-
     def spimi_invert(self, token_stream: List[Tuple[str, int]] | Generator[tuple[Any, int], Any, None]) -> str:
         """
         Perform SPIMI inversion on a token stream to create an inverted index.
@@ -244,9 +239,33 @@ class SPIMI:
 
         final_index_filename: str = self.merge_blocks(block_files)
 
+        self.calculate_document_lengths()
         self.save_index_data()
 
         return final_index_filename
+
+    def calculate_document_lengths(self):
+        """
+        Calculate the length of each document vector and store it in self.doc_lengths.
+        This is done after the final index is built.
+        """
+        with open(os.path.join(self.output_dir, 'inverted_index.bin'), 'rb') as f:
+            while True:
+                term_length_data = f.read(4)
+                if not term_length_data:
+                    break
+                term_length = struct.unpack('I', term_length_data)[0]
+                term = f.read(term_length).decode('utf-8')
+                postings_length = struct.unpack('I', f.read(4))[0]
+                postings = pickle.loads(f.read(postings_length))
+
+                idf = self.idf_values[term]
+                for doc_id, tf in postings.items():
+                    tfidf = tf * idf
+                    self.doc_lengths_n[doc_id] += tfidf ** 2
+
+        for doc_id in self.doc_lengths_n:
+            self.doc_lengths_n[doc_id] = math.sqrt(self.doc_lengths_n[doc_id])
 
     def get_posting_list(self, term: str) -> Dict[int, int] | None:
         """
@@ -279,6 +298,7 @@ class SPIMI:
         self.save_mapping(self.idf_values, 'idf.bin')
         self.save_mapping(dict(self.doc_lengths), 'doc_lengths.bin')
         self.save_mapping({'doc_count': self.doc_count}, 'doc_count.bin')
+        self.save_mapping(self.doc_lengths_n, 'doc_lengths_n.bin')
 
     def load_index_data(self):
         """
@@ -288,6 +308,7 @@ class SPIMI:
         self.idf_values = self.load_mapping('idf.bin')
         self.doc_lengths = self.load_mapping('doc_lengths.bin')
         self.doc_count = self.load_mapping('doc_count.bin').get('doc_count', 0)
+        self.doc_lengths_n = self.load_mapping('doc_lengths_n.bin')
 
     def save_mapping(self, dictionary: Dict[Any, Any], file_name: str):
         """
@@ -315,18 +336,49 @@ class SPIMI:
         except Exception as e:
             print(f"Error loading mapping from disk: {e}")
 
-    def compute_idf(self, postings):
-        if postings:
-            return math.log(self.doc_count / len(postings))
-        else:
-            return 0.0
+    def compute_idf(self, num_occurrences):
+        return math.log(self.doc_count / num_occurrences)
 
-    def compute_tf(self, term, doc_id):
-        postings = self.get_posting_list(term)
-        if postings and doc_id in postings:
-            return 1 + math.log(postings[doc_id])
-        else:
-            return 0.0
+    def compute_tf(self, term_count):
+        return 1 + math.log(term_count)
+
+    # def fast_cosine_score(self, query_terms, K=10):
+    #     """
+    #     Compute the top K documents for a query using cosine similarity.
+    #
+    #     Args:
+    #         query_terms (list): A list of query terms.
+    #         K (int): The number of top documents to return.
+    #
+    #     Returns:
+    #         list: A list of tuples (doc_id, score) of the top K documents.
+    #     """
+    #     Scores = defaultdict(float)
+    #
+    #     query_tfidf: Dict[str, float] = {}
+    #     total_term_count = len(query_terms)
+    #     for term in list(set(query_terms)):
+    #         # query_tfidf = tf * idf
+    #         query_tfidf[term] = (len([t for t in query_terms if t == term]) / total_term_count) * self.idf_values.get(term, 0.0)
+    #
+    #     # we will need to normalise only the document vector, not for the query. self.doc_lengths_n[doc_id] contains the normalised length of the document vector
+    #     for term in query_terms:
+    #         idf = self.idf_values.get(term, 0.0)
+    #         postings = self.get_posting_list(term)
+    #
+    #         if postings:
+    #             for doc_id, tf in postings.items():
+    #                 # do add Wt,d * Wt,q to Scores[d]
+    #                 w_t_d = tf * idf # document tfidf
+    #                 w_t_q = query_tfidf[term] # query tfidf
+    #                 Scores[doc_id] += w_t_d * w_t_q
+    #
+    #     for doc_id in Scores:
+    #         Scores[doc_id] /= self.doc_lengths[doc_id] # /= math.sqrt(self.doc_lengths[doc_id])
+    #
+    #     top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
+    #
+    #     return top_K_docs
 
     def fast_cosine_score(self, query_terms, K=10):
         """
@@ -341,13 +393,26 @@ class SPIMI:
         """
         Scores = defaultdict(float)
 
+        query_tfidf: Dict[str, float] = {}
+        total_term_count = len(query_terms)
+        for term in list(set(query_terms)):
+            # query_tfidf = tf * idf
+            query_tfidf[term] = (len([t for t in query_terms if t == term])) * self.idf_values.get(
+                term, 0.0)
+
+        # we will need to normalise only the document vector, not for the query. self.doc_lengths_n[doc_id] contains the normalised length of the document vector
         for term in query_terms:
             idf = self.idf_values.get(term, 0.0)
             postings = self.get_posting_list(term)
 
             if postings:
                 for doc_id, tf in postings.items():
-                    Scores[doc_id] += self.compute_tf(term, doc_id) * idf
+                    # do add Wt,d * Wt,q to Scores[d]
+                    w_t_d = tf * idf
+                    # normalise the document vector
+                    # w_t_d /= self.doc_lengths_n[doc_id]
+                    w_t_q = query_tfidf[term]
+                    Scores[doc_id] += w_t_d * w_t_q
 
         for doc_id in Scores:
             Scores[doc_id] /= self.doc_lengths[doc_id] # /= math.sqrt(self.doc_lengths[doc_id])
@@ -511,13 +576,32 @@ if __name__ == "__main__":
     
     """
 
+    start_time = time.time()
+    doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
+    print(f"Got Doc Dict in: {time.time() - start_time:.4f} seconds")
+
+    documents = list(doc_dict.values())
+    document_titles = list(doc_dict.keys())
+
+    # for i in range(10):
+    #     print(f"Document with title {document_titles[i]}: {documents[i]}")
+
     # token_stream = generate_token_stream(documents)
     # final_index_filename = spimi_invert(token_stream, output_dir="./spimi_output_binary", block_size_limit=10)
     # print(f"Final index written to: {final_index_filename}")
-    token_stream_ = generate_token_stream(documents)
-    spimi = SPIMI(block_size_limit=3)
-    final_index_filename_ = spimi.spimi_invert(token_stream_)
-    print(f"Final index written to: {final_index_filename_}")
+    spimi = None
+    if True:
+        start_time = time.time()
+        token_stream_ = generate_token_stream(documents)
+        print(f"Token stream generated in: {time.time() - start_time:.4f} seconds")
+        spimi = SPIMI(block_size_limit=10000)
+        start_time = time.time()
+        final_index_filename_ = spimi.spimi_invert(token_stream_)
+        print(f"Index creation (SPIMI invert) completed in: {time.time() - start_time:.4f} seconds")
+        print(f"Final index written to: {final_index_filename_}")
+    else:
+        spimi = SPIMI(block_size_limit=10000)
+        spimi.load_index_data()
 
     # print contents of all binary files in the output/spimi_output directory
     for file in os.listdir('../output/spimi_output'):
