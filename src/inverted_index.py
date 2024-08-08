@@ -138,41 +138,42 @@ class SPIMI:
         Returns:
             str: The filename of the merged block file.
         """
-        merged_index: Dict[str, Dict[int, float]] = defaultdict(dict)
-
         f1: BinaryIO = open(block_file1, 'rb')
         f2: BinaryIO = open(block_file2, 'rb')
 
         term1, postings1 = self.read_next_term_postings(f1)
         term2, postings2 = self.read_next_term_postings(f2)
 
-        while term1 is not None or term2 is not None:
-            if term1 is not None and (term2 is None or term1 < term2):
-                merged_index[term1] = postings1
-                term1, postings1 = self.read_next_term_postings(f1)
-            elif term2 is not None and (term1 is None or term2 < term1):
-                merged_index[term2] = postings2
-                term2, postings2 = self.read_next_term_postings(f2)
-            else:
-                merged_index[term1] = merge_dicts(postings1, postings2)
-                term1, postings1 = self.read_next_term_postings(f1)
-                term2, postings2 = self.read_next_term_postings(f2)
-
-        f1.close()
-        f2.close()
-
         merged_block_filename = os.path.join(self.output_dir, f"merged_{self.block_num}.bin")
         with open(merged_block_filename, 'wb') as f:
             offset = f.tell()
-            for term, postings in merged_index.items():
-                if is_last_merge:
-                    for doc_id, tf in postings.items():
-                        postings[doc_id] = self.compute_tf(tf)
-                    self.term_positions[term] = offset
-                    self.idf_values[term] = self.compute_idf(len(postings))
 
-                self.write_index_entry(term, postings, f)
+            while term1 is not None or term2 is not None:
+                current_term: str = ""
+                current_postings: Dict[int, float] = dict()
+                if term1 is not None and (term2 is None or term1 < term2):
+                    current_term, current_postings = term1, postings1
+                    term1, postings1 = self.read_next_term_postings(f1)
+                elif term2 is not None and (term1 is None or term2 < term1):
+                    current_term, current_postings = term2, postings2
+                    term2, postings2 = self.read_next_term_postings(f2)
+                elif term1 is not None and term2 is not None and term1 == term2: # term1 == term2
+                    current_term = term1
+                    current_postings = merge_dicts(postings1, postings2)
+                    term1, postings1 = self.read_next_term_postings(f1)
+                    term2, postings2 = self.read_next_term_postings(f2)
+
+                if is_last_merge:
+                    for doc_id, tf in current_postings.items():
+                        current_postings[doc_id] = self.compute_tf(tf)
+                    self.term_positions[current_term] = offset
+                    self.idf_values[current_term] = self.compute_idf(len(current_postings))
+
+                self.write_index_entry(current_term, current_postings, f)
                 offset = f.tell()
+
+        f1.close()
+        f2.close()
 
         self.block_num += 1
         return merged_block_filename
@@ -582,63 +583,62 @@ if __name__ == "__main__":
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
     print(f"Got Doc Dict in: {time.time() - start_time:.4f} seconds")
 
-    documents = list(doc_dict.values())
-    document_titles = list(doc_dict.keys())
+    # documents = list(doc_dict.values())
+    # document_titles = list(doc_dict.keys())
 
-    # for i in range(10):
-    #     print(f"Document with title {document_titles[i]}: {documents[i]}")
+    token_stream_ = generate_token_stream(documents)
+    spimi = SPIMI(block_size_limit=3)
+    final_index_filename = spimi.spimi_invert(token_stream_)
+    print(f"Final index written to: {final_index_filename}")
 
-    # token_stream = generate_token_stream(documents)
-    # final_index_filename = spimi_invert(token_stream, output_dir="./spimi_output_binary", block_size_limit=10)
-    # print(f"Final index written to: {final_index_filename}")
-    spimi = None
-    if True:
-        start_time = time.time()
-        token_stream_ = generate_token_stream(documents)
-        print(f"Token stream generated in: {time.time() - start_time:.4f} seconds")
-        spimi = SPIMI(block_size_limit=10000)
-        start_time = time.time()
-        final_index_filename_ = spimi.spimi_invert(token_stream_)
-        print(f"Index creation (SPIMI invert) completed in: {time.time() - start_time:.4f} seconds")
-        print(f"Final index written to: {final_index_filename_}")
-    else:
-        spimi = SPIMI(block_size_limit=10000)
-        spimi.load_index_data()
-
-    query_ = documents[9000]
-    start_time = time.time()
-    top_docs = spimi.fast_cosine_score(query_, K=10)
-    print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
-    print(f"\nTop documents for query '{query_}': {top_docs}")
-
-    for doc in top_docs:
-        print(document_titles[doc[0]])
-
-    # # print contents of all binary files in the output/spimi_output directory
-    # for file in os.listdir('../output/spimi_output'):
-    #     if file.endswith("index.bin"):
-    #         print("-----\n")
-    #         print("\nfile:", file)
-    #         print_block_file(os.path.join('../output/spimi_output', file))
-    #         print("-----\n")
+    # spimi = None
+    # if True:
+    #     start_time = time.time()
+    #     token_stream_ = generate_token_stream(documents)
+    #     print(f"Token stream generated in: {time.time() - start_time:.4f} seconds")
+    #     spimi = SPIMI(block_size_limit=10000)
+    #     start_time = time.time()
+    #     final_index_filename_ = spimi.spimi_invert(token_stream_)
+    #     print(f"Index creation (SPIMI invert) completed in: {time.time() - start_time:.4f} seconds")
+    #     print(f"Final index written to: {final_index_filename_}")
+    # else:
+    #     spimi = SPIMI(block_size_limit=10000)
+    #     spimi.load_index_data()
     #
-    # # Print contents of the final index file
-    # print("\nFinal index contents:")
-    # print_block_file(final_index_filename_)
-    #
-    # # Test retrieving the posting list for a term
-    # term_ = "then"
-    # postings_ = spimi.get_posting_list(term_)
-    # print(f"\nPosting list for term '{term_}': {postings_}")
-    #
-    # # Test saving and loading term positions
-    # spimi.save_mapping(spimi.term_positions, 'term_positions.bin')
-    # spimi.term_positions = spimi.load_mapping('term_positions.bin')
-    # term_ = "cat"
-    # postings_ = spimi.get_posting_list(term_)
-    # print(f"\nPosting list for term '{term_}': {postings_}")
-    #
-    # # Perform ranked retrieval with cosine similarity
-    # query_ = ["then", "cat"]
-    # top_docs = spimi.fast_cosine_score(query_, K=4)
+    # query_ = documents[9000]
+    # start_time = time.time()
+    # top_docs = spimi.fast_cosine_score(query_, K=10)
+    # print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
     # print(f"\nTop documents for query '{query_}': {top_docs}")
+    #
+    # for doc in top_docs:
+    #     print(document_titles[doc[0]])
+
+    # print contents of all binary files in the output/spimi_output directory
+    for file in os.listdir('../output/spimi_output'):
+        if file.endswith("index.bin"):
+            print("-----\n")
+            print("\nfile:", file)
+            print_block_file(os.path.join('../output/spimi_output', file))
+            print("-----\n")
+
+    # Print contents of the final index file
+    print("\nFinal index contents:")
+    print_block_file(final_index_filename)
+
+    # Test retrieving the posting list for a term
+    term_ = "then"
+    postings_ = spimi.get_posting_list(term_)
+    print(f"\nPosting list for term '{term_}': {postings_}")
+
+    # Test saving and loading term positions
+    spimi.save_mapping(spimi.term_positions, 'term_positions.bin')
+    spimi.term_positions = spimi.load_mapping('term_positions.bin')
+    term_ = "cat"
+    postings_ = spimi.get_posting_list(term_)
+    print(f"\nPosting list for term '{term_}': {postings_}")
+
+    # Perform ranked retrieval with cosine similarity
+    query_ = ["then", "cat"]
+    top_docs = spimi.fast_cosine_score(query_, K=4)
+    print(f"\nTop documents for query '{query_}': {top_docs}")
