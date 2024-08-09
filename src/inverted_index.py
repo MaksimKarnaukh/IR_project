@@ -46,7 +46,7 @@ class SPIMI:
         fast_cosine_score(self, query_terms, K=10)
     """
 
-    def __init__(self, block_size_limit: int = DEFAULT_BLOCK_SIZE_LIMIT, output_dir: str = variables.inverted_index_folder):
+    def __init__(self, block_size_limit: int = DEFAULT_BLOCK_SIZE_LIMIT, output_dir: str = variables.inverted_index_folder, force_reindex=False):
         """
         Initialize the SPIMI (Single-Pass In-Memory Indexing) instance.
 
@@ -66,8 +66,27 @@ class SPIMI:
         self.doc_count: int = 0  # total number of documents
 
         self.idf_values: Dict[str, float] = {}  # {term: idf_value}
+        if force_reindex:
+            # remove the existing index files
+            for file in os.listdir(output_dir):
+                if file.endswith(".bin"):
+                    os.remove(os.path.join(output_dir, file))
+            os.rmdir(output_dir)
+        # if index files do not exist, create them
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir, exist_ok=True)
+            self.create_index()
+        else:
+            self.load_index_data()
 
-        os.makedirs(self.output_dir, exist_ok=True)
+    def create_index(self):
+        start_time = time.time()
+        token_stream_ = generate_token_stream(documents)
+        print(f"Token stream generated in: {time.time() - start_time:.4f} seconds")
+        start_time = time.time()
+        final_index_filename_ = self.spimi_invert(token_stream_)
+        print(f"Index creation (SPIMI invert) completed in: {time.time() - start_time:.4f} seconds")
+        print(f"Final index written to: {final_index_filename_}")
 
     def write_index_entry(self, term: str, postings: Dict[int, float], f: BinaryIO):
         """
@@ -587,19 +606,7 @@ if __name__ == "__main__":
 
     documents = list(doc_dict.values())
     document_titles = list(doc_dict.keys())
-    spimi = None
-    if True:
-        start_time = time.time()
-        token_stream_ = generate_token_stream(documents)
-        print(f"Token stream generated in: {time.time() - start_time:.4f} seconds")
-        spimi = SPIMI(block_size_limit=10000)
-        start_time = time.time()
-        final_index_filename_ = spimi.spimi_invert(token_stream_)
-        print(f"Index creation (SPIMI invert) completed in: {time.time() - start_time:.4f} seconds")
-        print(f"Final index written to: {final_index_filename_}")
-    else:
-        spimi = SPIMI(block_size_limit=10000)
-        spimi.load_index_data()
+    spimi = SPIMI(block_size_limit=10000, force_reindex=True)
 
     query_ = documents[9000]
     start_time = time.time()
