@@ -606,7 +606,7 @@ if __name__ == "__main__":
 
     documents = list(doc_dict.values())
     document_titles = list(doc_dict.keys())
-    spimi = SPIMI(block_size_limit=10000, force_reindex=True)
+    spimi = SPIMI(block_size_limit=10000, force_reindex=False)
 
     query_ = documents[9000]
     start_time = time.time()

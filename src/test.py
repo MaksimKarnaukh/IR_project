@@ -1,16 +1,36 @@
+import numpy as np
+
+from src.inverted_index import SPIMI
 from src.related_doc_retrieval import RelatedDocumentsRetrieval
 from utils import *
+import time
 import variables
+# from sklearn.metrics.pairwise import cosine_similarity
+def cosine_similarity(v1, v2) -> float:
+    return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
 
-def calculatePrecisionAndRecall(expected, retrieved) -> tuple:
+def calculateIntraListSimilarity(expected, retrieved) -> float:
+    ILS = 0
+    similarities = cosine_similarity( retrieved, expected)
+    ILS += similarities.sum()
+    ILS /= len(retrieved) * (len(retrieved) - 1) / 2
+    return ILS
+
+def calculatePrecisionAndRecall(expected, retrieved, k=0) -> tuple:
     """
     • P(recision) = TP/(TP+FP) how much correct of found
     • R(ecall) = TP/(TP+FN) how much of correct
     :param expected: list of expected values (ground truth labels)
     :param retrieved: list of retrieved values (our algorithm)
+    :param k: cut-off value (top k retrieved values)
     :return: tuple(precision, recall)
     """
+    if k != 0:
+        retrieved = retrieved[:k]
+        expected = expected[:k]
+
+
     # number of retrieved values that are also in expected (True positive)
     TP = len([ret for ret in retrieved if ret in expected])
 
@@ -83,6 +103,46 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
 
     return kappa
 
+def compare_with_lucene():
+    from pylucene import PyLuceneWrapper
+    doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
+    lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
+    retrievalsystem = SPIMI(block_size_limit=10000)
+    # start timer
+    start = time.time()
+    metrics = {"precisions@": {3:[], 5:[], 10:[]}, "recalls@": {3:[], 5:[], 10:[]}}
+    print("Start comparing with lucene")
+    # loop over all the documents
+    doc_nr = 0
+    document_titles = list(doc_dict.keys())
+    for title, text in doc_dict.items():
+        if doc_nr % 10 == 0 and doc_nr != 0:
+            print(f"Document nr: {doc_nr} /", len(doc_dict))
+            average_time = (time.time() - start) / (doc_nr+1)
+            print(f"Average time per document: {average_time}")
+            docs_left = len(doc_dict) - doc_nr
+            print(f"Time left: {average_time * docs_left}")
+            print(f"Average precision@3: {sum(metrics['precisions@'][3]) / len(metrics['precisions@'][3])}")
+        doc_nr += 1
+        start_time_ = time.time()
+        # get the similar documents from the retrieval system
+        similar_documents = retrievalsystem.fast_cosine_score(text, K=10)
+        similar_documents_titles = [(document_titles[tup[0]], tup[1]) for tup in similar_documents]
+
+        print(f"Retrieval system time: {time.time() - start_time_}")
+        # get the similar documents from the lucene system
+        start_time_lucene = time.time()
+        similar_documents_lucene = lucene_retrieval_system.search_index(text, 10)
+        print(f"Lucene time: {time.time() - start_time_lucene}")
+
+        expected = [tup[0] for tup in similar_documents_lucene]
+        retrieved = [tup[0] for tup in similar_documents_titles]
+
+        # calculate the metrics
+        for k in metrics["precisions@"]:
+            precision, recall = calculatePrecisionAndRecall(expected=expected, retrieved=retrieved, k=k)
+            metrics[f"precisions@"][k].append(precision)
+            metrics[f"recalls@"][k].append(recall)
 
 def testAll():
     """
@@ -113,10 +173,13 @@ def testAll():
         # initialize the metrics
         metrics = {"precisions": [], "recalls": [], "F1 scores": [], "kappas": []}
         # loop over the ground truth labels
-        for title, similar_documents_gt in alive_it(ground_truth_labels.items(), title="Testing"):
+        for title, similar_documents_gt in ground_truth_labels.items():
             # retrieve similar documents
             query_document = doc_dict[title]
             similar_documents_titles, similar_documents, scores = retrievalsystem.retrieve_similar_documents(query_document, title, 10)
+
+
+
             # calculate the metrics
             score_dict = dict(zip(similar_documents_titles, scores))
             par = calculatePrecisionAndRecall(similar_documents_gt, similar_documents_titles)
@@ -140,6 +203,13 @@ def testAll():
         print("Average F1 score: ", sum(metrics["F1 scores"])/len(metrics["F1 scores"]))
         print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
 
+
+
 if __name__ == '__main__':
+    # calculateIntraListSimilarity([1, 2, 3], [1, 2, 3])
+
     # test the retrieval system
-    testAll()
+    # testAll()
+
+    # compare with lucene
+    compare_with_lucene()

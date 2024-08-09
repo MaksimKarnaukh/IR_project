@@ -149,7 +149,9 @@ def getDocDict(filepath_video_games, csv_doc_dict):
     else:
         filename = os.path.basename(filepath_video_games)
         directory = os.path.dirname(filepath_video_games)
+        # create the corrected file path
         corrected_filepath_video_games = directory+ '/corrected_'+filename
+        # Correct the dataset file if it has not been corrected
         correct_dataset_file(filepath_video_games, corrected_filepath_video_games)
         # read the dataset file into a dictionary
         doc_dict = read_dataset_file(corrected_filepath_video_games)
