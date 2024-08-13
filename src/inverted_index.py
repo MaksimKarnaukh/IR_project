@@ -46,7 +46,7 @@ class SPIMI:
         fast_cosine_score(self, query_terms, K=10)
     """
 
-    def __init__(self, block_size_limit: int = DEFAULT_BLOCK_SIZE_LIMIT, output_dir: str = variables.inverted_index_folder, force_reindex=False):
+    def __init__(self, block_size_limit: int = DEFAULT_BLOCK_SIZE_LIMIT, output_dir: str = variables.inverted_index_folder, force_reindex=False, documents=None):
         """
         Initialize the SPIMI (Single-Pass In-Memory Indexing) instance.
 
@@ -58,6 +58,9 @@ class SPIMI:
         self.output_dir: str = output_dir
         self.block_num: int = 0
         self.dictionary: Dict[str, Dict[int, float]] = dict() # {term: {doc_id: freq}}
+
+        self.inv_index_in_mem: Dict[str, Dict[int, float]] = dict()
+
         self.token_count: int = 0
         self.term_positions: Dict[str, int] = {}  # {term: offset}
 
@@ -75,11 +78,11 @@ class SPIMI:
         # if index files do not exist, create them
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir, exist_ok=True)
-            self.create_index()
+            self.create_index(documents)
         else:
             self.load_index_data()
 
-    def create_index(self):
+    def create_index(self, documents: List[str] | Generator[str, Any, None]):
         start_time = time.time()
         token_stream_ = generate_token_stream(documents)
         print(f"Token stream generated in: {time.time() - start_time:.4f} seconds")
@@ -107,7 +110,7 @@ class SPIMI:
         except Exception as e:
             print(f"Error writing term '{term}' to disk: {e}")
 
-    def write_block_to_disk(self) -> str:
+    def write_block_to_disk(self, is_single_index_file: bool = False) -> str:
         """
         Write the current in-memory term dictionary to a block file on disk.
 
@@ -118,6 +121,12 @@ class SPIMI:
         with open(block_filename, 'wb') as f:
             sorted_terms = sorted(self.dictionary.items())
             for term, postings in sorted_terms:
+                if is_single_index_file:
+                    for doc_id, tf in postings.items():
+                        postings[doc_id] = self.compute_tf(tf)
+                    self.term_positions[term] = f.tell()
+                    self.idf_values[term] = self.compute_idf(len(postings))
+                    self.inv_index_in_mem[term] = postings
                 self.write_index_entry(term, postings, f)
 
         self.block_num += 1
@@ -187,6 +196,7 @@ class SPIMI:
                         current_postings[doc_id] = self.compute_tf(tf)
                     self.term_positions[current_term] = offset
                     self.idf_values[current_term] = self.compute_idf(len(current_postings))
+                    self.inv_index_in_mem[current_term] = current_postings
 
                 self.write_index_entry(current_term, current_postings, f)
                 offset = f.tell()
@@ -257,7 +267,7 @@ class SPIMI:
             self.doc_lengths[doc_id] += 1
 
         if self.token_count > 0:
-            block_files.append(self.write_block_to_disk())
+            block_files.append(self.write_block_to_disk(self.block_num == 0))
 
         final_index_filename: str = self.merge_blocks(block_files)
 
@@ -311,6 +321,7 @@ class SPIMI:
                 return postings
         else:
             return None
+        # return self.inv_index_in_mem.get(term, None)
 
     def save_index_data(self):
         """
@@ -359,10 +370,10 @@ class SPIMI:
             print(f"Error loading mapping from disk: {e}")
 
     def compute_idf(self, num_occurrences):
-        return math.log(self.doc_count / num_occurrences)
+        return math.log(self.doc_count / num_occurrences, 10)
 
     def compute_tf(self, term_count):
-        return 1 + math.log(term_count)
+        return 1 + math.log(term_count, 10)
 
     # def fast_cosine_score(self, query_terms, K=10):
     #     """
@@ -418,10 +429,14 @@ class SPIMI:
         query_tfidf: Dict[str, float] = {}
         for term in list(set(query_terms)):
             # query_tfidf = tf * idf
-            query_tfidf[term] = (1+math.log(len([t for t in query_terms if t == term]))) * self.idf_values.get(
+            query_tfidf[term] = (1+math.log(len([t for t in query_terms if t == term]), 10)) * self.idf_values.get(
                 term, 0.0)
 
-        # we will need to normalise only the document vector, not for the query.
+        # normalize the query vector
+        query_length = math.sqrt(sum([v**2 for v in query_tfidf.values()]))
+        for term in query_tfidf:
+            query_tfidf[term] /= query_length
+
         for term in query_terms:
             idf: float = self.idf_values.get(term, 0.0) # self.idf_values was calculated during indexing
             postings: Dict[int, float] = self.get_posting_list(term)
@@ -429,12 +444,11 @@ class SPIMI:
             if postings:
                 for doc_id, tf in postings.items():
                     w_t_d = tf * idf # tf contains the value 1+log(tf_t,d)
-                    w_t_d /= self.doc_lengths_n[doc_id] # normalise the document vector, self.doc_lengths_n holds per document the sqrt of the sum of the squares of the tfidf values
                     w_t_q = query_tfidf[term]
                     Scores[doc_id] += w_t_d * w_t_q # do add Wt,d * Wt,q to Scores[d]
 
-        # for doc_id in Scores:
-        #     Scores[doc_id] /= self.doc_lengths[doc_id] # uit het boek
+        for doc_id in Scores:
+            Scores[doc_id] /= self.doc_lengths_n[doc_id]
 
         top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
 
@@ -502,113 +516,24 @@ if __name__ == "__main__":
         "then lazy dog",
         "then hat sis inn then cat",
     ]
-    # the cat in the hat quick brown fox lazy dog
-    """
-    BLOCK 1:
-    then: d1
-    cat: d1
-    inn: d1
-    
-    FLUSH
-    
-    BLOCK 2:
-    hat: d1
-    then: d2
-    quick: d2
-    
-    FLUSH
-    
-    BLOCK 3:
-    brown: d2
-    fox: d2
-    then: d3
-    
-    FLUSH
-    
-    BLOCK 4:
-    lazy: d3
-    dog: d3
-    then: d4
-    
-    FLUSH
-    
-    BLOCK 5:
-    hat: d4
-    sis: d4
-    inn: d4
-    
-    FLUSH
-    
-    BLOCK 6:
-    then: d4
-    cat: d4
-    
-    MERGE BLOCK1 and BLOCK2 into BLOCK12
-    
-    then: d1, d2
-    cat: d1
-    inn: d1
-    hat: d1
-    quick: d2
-    
-    MERGE BLOCK3 and BLOCK4 into BLOCK34
-    
-    brown: d2
-    fox: d2
-    then: d3, d4
-    lazy: d3
-    dog: d3
-    
-    MERGE BLOCK5 and BLOCK6 into BLOCK56
-    
-    hat: d4
-    sis: d4
-    inn: d4
-    then: d4
-    cat: d4
-    
-    MERGE BLOCK12 and BLOCK34 into BLOCK1234
-    
-    then: d1, d2, d3, d4
-    cat: d1
-    inn: d1
-    hat: d1
-    quick: d2
-    brown: d2
-    fox: d2
-    lazy: d3
-    dog: d3
-    
-    MERGE BLOCK1234 and BLOCK56 into BLOCK123456
-    
-    then: d1, d2, d3, d4
-    cat: d1, d4
-    inn: d1, d4
-    hat: d1, d4
-    quick: d2
-    brown: d2
-    fox: d2
-    lazy: d3
-    dog: d3
-    sis: d4
-    
-    
-    """
+    documents = [
+        "car "*27 + "auto "*3 + "insurance "*0 + "best "*14,
+        "car "*4 + "auto "*33 + "insurance "*33 + "best "*0,
+        "car "*24 + "auto "*0 + "insurance "*29 + "best "*17,
+    ]
 
     start_time = time.time()
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
     print(f"Got Doc Dict in: {time.time() - start_time:.4f} seconds")
 
-    # token_stream_ = generate_token_stream(documents)
-    # spimi = SPIMI(block_size_limit=3)
-    # final_index_filename = spimi.spimi_invert(token_stream_)
-    # print(f"Final index written to: {final_index_filename}")
-
     documents = list(doc_dict.values())
     document_titles = list(doc_dict.keys())
-    spimi = SPIMI(block_size_limit=10000, force_reindex=False)
+    spimi = SPIMI(block_size_limit=10000, force_reindex=False, documents=documents)
 
-    query_ = documents[9000]
+    # put documents[9000] string of words into a list of words
+    query_ = documents[9000].split()
+
+    # query_ = ["mario"]
     start_time = time.time()
     top_docs = spimi.fast_cosine_score(query_, K=10)
     print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
@@ -625,23 +550,31 @@ if __name__ == "__main__":
     #         print_block_file(os.path.join('../output/spimi_output', file))
     #         print("-----\n")
     #
-    # # Print contents of the final index file
-    # print("\nFinal index contents:")
-    # print_block_file(final_index_filename)
-    #
     # # Test retrieving the posting list for a term
-    # term_ = "then"
+    # term_ = "car"
     # postings_ = spimi.get_posting_list(term_)
     # print(f"\nPosting list for term '{term_}': {postings_}")
     #
     # # Test saving and loading term positions
     # spimi.save_mapping(spimi.term_positions, 'term_positions.bin')
     # spimi.term_positions = spimi.load_mapping('term_positions.bin')
-    # term_ = "cat"
+    # term_ = "auto"
     # postings_ = spimi.get_posting_list(term_)
     # print(f"\nPosting list for term '{term_}': {postings_}")
+    # term_ = "insurance"
+    # postings_ = spimi.get_posting_list(term_)
+    # print(f"\nPosting list for term '{term_}': {postings_}")
+    # term_ = "best"
+    # postings_ = spimi.get_posting_list(term_)
+    # print(f"\nPosting list for term '{term_}': {postings_}")
+    # #
+    # # # Perform ranked retrieval with cosine similarity
+    # # query_ = ["then", "cat"]
+    # # top_docs = spimi.fast_cosine_score(query_, K=4)
+    # # print(f"\nTop documents for query '{query_}': {top_docs}")
     #
-    # # Perform ranked retrieval with cosine similarity
-    # query_ = ["then", "cat"]
-    # top_docs = spimi.fast_cosine_score(query_, K=4)
+    # query_ = ["best", "auto", "insurance"]
+    # start_time = time.time()
+    # top_docs = spimi.fast_cosine_score(query_, K=10)
+    # print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
     # print(f"\nTop documents for query '{query_}': {top_docs}")
