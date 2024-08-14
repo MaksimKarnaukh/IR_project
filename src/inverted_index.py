@@ -375,6 +375,16 @@ class SPIMI:
     def compute_tf(self, term_count):
         return 1 + math.log(term_count, 10)
 
+    def compute_document_tfidf(self, document_as_list):
+        doc_tfidf: Dict[str, float] = {}
+
+        for term in list(set(document_as_list)):
+            # tfidf = tf * idf
+            doc_tfidf[term] = (1+math.log(len([t for t in document_as_list if t == term]), 10)) * self.idf_values.get(
+                term, 0.0)
+
+        return doc_tfidf
+
     # def fast_cosine_score(self, query_terms, K=10):
     #     """
     #     Compute the top K documents for a query using cosine similarity.
@@ -453,6 +463,63 @@ class SPIMI:
         top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
 
         return top_K_docs
+
+    def rocchio_update(self, query_vector, relevant_docs, non_relevant_docs, alpha=1, beta=0.75, gamma=0.25):
+        updated_vector = defaultdict(float)
+
+        # Add original query vector
+        for term, weight in query_vector.items():
+            updated_vector[term] += alpha * weight
+
+        # Add relevant documents' vectors
+        for doc_vector in relevant_docs:
+            for term, weight in doc_vector.items():
+                updated_vector[term] += (beta / len(relevant_docs)) * weight
+
+        # Subtract non-relevant documents' vectors
+        for doc_vector in non_relevant_docs:
+            for term, weight in doc_vector.items():
+                updated_vector[term] -= (gamma / len(non_relevant_docs)) * weight
+
+        return updated_vector
+
+    def fast_cosine_after_rocchio_update(self, query_vector, K=10):
+        """
+        Compute the top K documents for a query using cosine similarity.
+
+        Args:
+            query_terms (list): A list of query terms.
+            K (int): The number of top documents to return.
+
+        Returns:
+            list: A list of tuples (doc_id, score) of the top K documents.
+        """
+        Scores = defaultdict(float)
+
+        query_tfidf = query_vector
+
+        # normalize the query vector
+        query_length = math.sqrt(sum([v**2 for v in query_tfidf.values()]))
+        for term in query_tfidf:
+            query_tfidf[term] /= query_length
+
+        for term in query_tfidf.keys():
+            idf: float = self.idf_values.get(term, 0.0) # self.idf_values was calculated during indexing
+            postings: Dict[int, float] = self.get_posting_list(term)
+
+            if postings:
+                for doc_id, tf in postings.items():
+                    w_t_d = tf * idf # tf contains the value 1+log(tf_t,d)
+                    w_t_q = query_tfidf[term]
+                    Scores[doc_id] += w_t_d * w_t_q # do add Wt,d * Wt,q to Scores[d]
+
+        for doc_id in Scores:
+            Scores[doc_id] /= self.doc_lengths_n[doc_id]
+
+        top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
+
+        return top_K_docs
+
 
 
 def generate_token_stream(documents: List[str] | Generator[str, Any, None]) -> Generator[Tuple[str, int], Any, None]:
@@ -540,6 +607,71 @@ if __name__ == "__main__":
     print(f"\nTop documents for query '{query_}': {top_docs}")
 
     for doc in top_docs:
+        print(document_titles[doc[0]])
+
+    """
+    Rocchio:
+    Say for the sake of simplicity, the user likes documents at index 6, 8 and 9
+    Numbers aren't chosen randomly but are rather documents not in the top 5
+    This will challenge rocchio to find documents that are more closely related to the bottom 5 of the top 10
+    """
+
+    # obtain doc indices (not cosine score)
+    relevant_docs = [top_docs[6][0], top_docs[8][0], top_docs[9][0]]
+    irrelevant_docs = [doc[0] for doc in top_docs if doc not in relevant_docs]
+
+    tfidf_relevant_docs = []
+    tfidf_irrelevant_docs = []
+
+    for rel_doc_id in relevant_docs:
+        tfidf_relevant_docs.append(spimi.compute_document_tfidf(documents[rel_doc_id].split()))
+
+    for irr_doc_id in irrelevant_docs:
+        tfidf_irrelevant_docs.append(spimi.compute_document_tfidf(documents[irr_doc_id].split()))
+
+    # relevant docs are expected to be the dictionary for key: term, value: tfidf
+    original_query_vectorized = spimi.compute_document_tfidf(query_)
+    first_rocchio_iteration_query = spimi.rocchio_update(query_vector=original_query_vectorized, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
+
+    # new_query is now a vector and no longer a list of words (this was needed for rocchio)
+    top_docs_after_rocchio = spimi.fast_cosine_after_rocchio_update(query_vector=first_rocchio_iteration_query)
+
+    print("\n-------\nafter rocchio\n-------\n")
+    for doc in top_docs_after_rocchio:
+        print(document_titles[doc[0]])
+
+    """
+    If you now want to do rocchio again, say you select only 1 document, this being document at index 2
+    Repeat the same process but DO NOT vectorize the previous query again. It is already vectorizes
+    This is because in the original fast cosine, you pass a list of words as query
+    In Rocchio, you pass a vector so in the next Rocchio iteration, this will still be a vector
+    """
+
+    # obtain doc indices (not cosine score)
+    relevant_docs = [top_docs[2][0]]
+    irrelevant_docs = [doc[0] for doc in top_docs if doc not in relevant_docs]
+
+    tfidf_relevant_docs = []
+    tfidf_irrelevant_docs = []
+
+    for rel_doc_id in relevant_docs:
+        tfidf_relevant_docs.append(spimi.compute_document_tfidf(documents[rel_doc_id].split()))
+
+    for irr_doc_id in irrelevant_docs:
+        tfidf_irrelevant_docs.append(spimi.compute_document_tfidf(documents[irr_doc_id].split()))
+
+    # DONT DO ANYTHING WITH VECTORIZING
+    #original_query_vectorized = spimi.compute_document_tfidf(query_)
+
+    # THE NEXT 'query_vector' IS THE PREVIOUS ROCCHIO QUERY WHICH IS CALLED 'new_query_for_rocchio'
+    previous_query = first_rocchio_iteration_query
+    second_rocchio_iteration_query = spimi.rocchio_update(query_vector=previous_query, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
+
+    # new_query is now a vector and no longer a list of words (this was needed for rocchio)
+    top_docs_after_rocchio = spimi.fast_cosine_after_rocchio_update(query_vector=second_rocchio_iteration_query)
+
+    print("\n-------\nafter rocchio\n-------\n")
+    for doc in top_docs_after_rocchio:
         print(document_titles[doc[0]])
 
     # # print contents of all binary files in the output/spimi_output directory
