@@ -385,62 +385,28 @@ class SPIMI:
 
         return doc_tfidf
 
-    # def fast_cosine_score(self, query_terms, K=10):
-    #     """
-    #     Compute the top K documents for a query using cosine similarity.
-    #
-    #     Args:
-    #         query_terms (list): A list of query terms.
-    #         K (int): The number of top documents to return.
-    #
-    #     Returns:
-    #         list: A list of tuples (doc_id, score) of the top K documents.
-    #     """
-    #     Scores = defaultdict(float)
-    #
-    #     query_tfidf: Dict[str, float] = {}
-    #     total_term_count = len(query_terms)
-    #     for term in list(set(query_terms)):
-    #         # query_tfidf = tf * idf
-    #         query_tfidf[term] = (len([t for t in query_terms if t == term]) / total_term_count) * self.idf_values.get(term, 0.0)
-    #
-    #     # we will need to normalise only the document vector, not for the query. self.doc_lengths_n[doc_id] contains the normalised length of the document vector
-    #     for term in query_terms:
-    #         idf = self.idf_values.get(term, 0.0)
-    #         postings = self.get_posting_list(term)
-    #
-    #         if postings:
-    #             for doc_id, tf in postings.items():
-    #                 # do add Wt,d * Wt,q to Scores[d]
-    #                 w_t_d = tf * idf # document tfidf
-    #                 w_t_q = query_tfidf[term] # query tfidf
-    #                 Scores[doc_id] += w_t_d * w_t_q
-    #
-    #     for doc_id in Scores:
-    #         Scores[doc_id] /= self.doc_lengths[doc_id] # /= math.sqrt(self.doc_lengths[doc_id])
-    #
-    #     top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
-    #
-    #     return top_K_docs
-
-    def fast_cosine_score(self, query_terms, K=10):
+    def fast_cosine_score(self, query_terms: List[str] | Dict[str, float], K=10):
         """
         Compute the top K documents for a query using cosine similarity.
 
         Args:
-            query_terms (list): A list of query terms.
+            query_terms (List[str] | Dict[str, float]): A list of query terms or dictionary of query tf-idf values.
             K (int): The number of top documents to return.
 
         Returns:
             list: A list of tuples (doc_id, score) of the top K documents.
         """
-        Scores = defaultdict(float)
+        scores = defaultdict(float)
 
         query_tfidf: Dict[str, float] = {}
-        for term in list(set(query_terms)):
-            # query_tfidf = tf * idf
-            query_tfidf[term] = (1+math.log(len([t for t in query_terms if t == term]), 10)) * self.idf_values.get(
-                term, 0.0)
+        if isinstance(query_terms, list):
+            for term in list(set(query_terms)):
+                # query_tfidf = tf * idf
+                query_tfidf[term] = (1+math.log(len([t for t in query_terms if t == term]), 10)) * self.idf_values.get(
+                    term, 0.0)
+        elif isinstance(query_terms, dict):
+            query_tfidf = query_terms
+            query_terms = list(query_terms.keys())
 
         # normalize the query vector
         query_length = math.sqrt(sum([v**2 for v in query_tfidf.values()]))
@@ -455,12 +421,12 @@ class SPIMI:
                 for doc_id, tf in postings.items():
                     w_t_d = tf * idf # tf contains the value 1+log(tf_t,d)
                     w_t_q = query_tfidf[term]
-                    Scores[doc_id] += w_t_d * w_t_q # do add Wt,d * Wt,q to Scores[d]
+                    scores[doc_id] += w_t_d * w_t_q # do add Wt,d * Wt,q to Scores[d]
 
-        for doc_id in Scores:
-            Scores[doc_id] /= self.doc_lengths_n[doc_id]
+        for doc_id in scores:
+            scores[doc_id] /= self.doc_lengths_n[doc_id]
 
-        top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
+        top_K_docs = heapq.nlargest(K, scores.items(), key=lambda item: item[1])
 
         return top_K_docs
 
@@ -483,44 +449,42 @@ class SPIMI:
 
         return updated_vector
 
-    def fast_cosine_after_rocchio_update(self, query_vector, K=10):
-        """
-        Compute the top K documents for a query using cosine similarity.
-
-        Args:
-            query_terms (list): A list of query terms.
-            K (int): The number of top documents to return.
-
-        Returns:
-            list: A list of tuples (doc_id, score) of the top K documents.
-        """
-        Scores = defaultdict(float)
-
-        query_tfidf = query_vector
-
-        # normalize the query vector
-        query_length = math.sqrt(sum([v**2 for v in query_tfidf.values()]))
-        for term in query_tfidf:
-            query_tfidf[term] /= query_length
-
-        for term in query_tfidf.keys():
-            idf: float = self.idf_values.get(term, 0.0) # self.idf_values was calculated during indexing
-            postings: Dict[int, float] = self.get_posting_list(term)
-
-            if postings:
-                for doc_id, tf in postings.items():
-                    w_t_d = tf * idf # tf contains the value 1+log(tf_t,d)
-                    w_t_q = query_tfidf[term]
-                    Scores[doc_id] += w_t_d * w_t_q # do add Wt,d * Wt,q to Scores[d]
-
-        for doc_id in Scores:
-            Scores[doc_id] /= self.doc_lengths_n[doc_id]
-
-        top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
-
-        return top_K_docs
-
-
+    # def fast_cosine_after_rocchio_update(self, query_vector, K=10):
+    #     """
+    #     Compute the top K documents for a query using cosine similarity.
+    #
+    #     Args:
+    #         query_terms (list): A list of query terms.
+    #         K (int): The number of top documents to return.
+    #
+    #     Returns:
+    #         list: A list of tuples (doc_id, score) of the top K documents.
+    #     """
+    #     Scores = defaultdict(float)
+    #
+    #     query_tfidf = query_vector
+    #
+    #     # normalize the query vector
+    #     query_length = math.sqrt(sum([v**2 for v in query_tfidf.values()]))
+    #     for term in query_tfidf:
+    #         query_tfidf[term] /= query_length
+    #
+    #     for term in query_tfidf.keys():
+    #         idf: float = self.idf_values.get(term, 0.0) # self.idf_values was calculated during indexing
+    #         postings: Dict[int, float] = self.get_posting_list(term)
+    #
+    #         if postings:
+    #             for doc_id, tf in postings.items():
+    #                 w_t_d = tf * idf # tf contains the value 1+log(tf_t,d)
+    #                 w_t_q = query_tfidf[term]
+    #                 Scores[doc_id] += w_t_d * w_t_q # do add Wt,d * Wt,q to Scores[d]
+    #
+    #     for doc_id in Scores:
+    #         Scores[doc_id] /= self.doc_lengths_n[doc_id]
+    #
+    #     top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
+    #
+    #     return top_K_docs
 
 def generate_token_stream(documents: List[str] | Generator[str, Any, None]) -> Generator[Tuple[str, int], Any, None]:
     """
@@ -634,7 +598,7 @@ if __name__ == "__main__":
     first_rocchio_iteration_query = spimi.rocchio_update(query_vector=original_query_vectorized, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
 
     # new_query is now a vector and no longer a list of words (this was needed for rocchio)
-    top_docs_after_rocchio = spimi.fast_cosine_after_rocchio_update(query_vector=first_rocchio_iteration_query)
+    top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=first_rocchio_iteration_query)
 
     print("\n-------\nafter rocchio\n-------\n")
     for doc in top_docs_after_rocchio:
@@ -668,7 +632,7 @@ if __name__ == "__main__":
     second_rocchio_iteration_query = spimi.rocchio_update(query_vector=previous_query, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
 
     # new_query is now a vector and no longer a list of words (this was needed for rocchio)
-    top_docs_after_rocchio = spimi.fast_cosine_after_rocchio_update(query_vector=second_rocchio_iteration_query)
+    top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=second_rocchio_iteration_query)
 
     print("\n-------\nafter rocchio\n-------\n")
     for doc in top_docs_after_rocchio:
