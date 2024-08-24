@@ -46,7 +46,7 @@ class SPIMI:
         fast_cosine_score(self, query_terms, K=10)
     """
 
-    def __init__(self, block_size_limit: int = DEFAULT_BLOCK_SIZE_LIMIT, output_dir: str = variables.inverted_index_folder, force_reindex=False, documents=None):
+    def __init__(self, block_size_limit: int = DEFAULT_BLOCK_SIZE_LIMIT, output_dir: str = variables.inverted_index_folder, force_reindex=False, documents=None, document_titles=None):
         """
         Initialize the SPIMI (Single-Pass In-Memory Indexing) instance.
 
@@ -81,6 +81,8 @@ class SPIMI:
             self.create_index(documents)
         else:
             self.load_index_data()
+
+        self.document_titles = document_titles
 
     def create_index(self, documents: List[str] | Generator[str, Any, None]):
         start_time = time.time()
@@ -385,7 +387,18 @@ class SPIMI:
 
         return doc_tfidf
 
-    def fast_cosine_score(self, query_terms: List[str] | Dict[str, float], K=10):
+    def remove_query_title_from_results(self, query_title, num_results, similar_documents_sorted):
+        num_results_most_similar = []
+        idx = 0
+        # get the most similar documents
+        while len(num_results_most_similar) < num_results and idx < len(similar_documents_sorted):
+            # if the document is not the query document, add it to the list of most similar documents
+            if not self.document_titles[similar_documents_sorted[idx][0]] == query_title:
+                num_results_most_similar.append(similar_documents_sorted[idx])
+            idx += 1
+        return num_results_most_similar
+
+    def fast_cosine_score(self, query_terms: List[str] | Dict[str, float], k=10, query_doc_title=None):
         """
         Compute the top K documents for a query using cosine similarity.
 
@@ -426,11 +439,16 @@ class SPIMI:
         for doc_id in scores:
             scores[doc_id] /= self.doc_lengths_n[doc_id]
 
-        top_K_docs = heapq.nlargest(K, scores.items(), key=lambda item: item[1])
+        if query_doc_title:
+            top_k_docs: List[Tuple[int, float]] = heapq.nlargest(k + 1, scores.items(), key=lambda item: item[1])
+            top_k_docs = self.remove_query_title_from_results(query_title=query_doc_title, num_results=k, similar_documents_sorted=top_k_docs)
+        else:
+            top_k_docs: List[Tuple[int, float]] = heapq.nlargest(k, scores.items(), key=lambda item: item[1])
 
-        return top_K_docs
+        return top_k_docs
 
-    def rocchio_update(self, query_vector, relevant_docs, non_relevant_docs, alpha=1, beta=0.75, gamma=0.25):
+    @staticmethod
+    def rocchio_update(query_vector, relevant_docs, non_relevant_docs, alpha=1, beta=0.75, gamma=0.25):
         updated_vector = defaultdict(float)
 
         # Add original query vector
@@ -448,43 +466,6 @@ class SPIMI:
                 updated_vector[term] -= (gamma / len(non_relevant_docs)) * weight
 
         return updated_vector
-
-    # def fast_cosine_after_rocchio_update(self, query_vector, K=10):
-    #     """
-    #     Compute the top K documents for a query using cosine similarity.
-    #
-    #     Args:
-    #         query_terms (list): A list of query terms.
-    #         K (int): The number of top documents to return.
-    #
-    #     Returns:
-    #         list: A list of tuples (doc_id, score) of the top K documents.
-    #     """
-    #     Scores = defaultdict(float)
-    #
-    #     query_tfidf = query_vector
-    #
-    #     # normalize the query vector
-    #     query_length = math.sqrt(sum([v**2 for v in query_tfidf.values()]))
-    #     for term in query_tfidf:
-    #         query_tfidf[term] /= query_length
-    #
-    #     for term in query_tfidf.keys():
-    #         idf: float = self.idf_values.get(term, 0.0) # self.idf_values was calculated during indexing
-    #         postings: Dict[int, float] = self.get_posting_list(term)
-    #
-    #         if postings:
-    #             for doc_id, tf in postings.items():
-    #                 w_t_d = tf * idf # tf contains the value 1+log(tf_t,d)
-    #                 w_t_q = query_tfidf[term]
-    #                 Scores[doc_id] += w_t_d * w_t_q # do add Wt,d * Wt,q to Scores[d]
-    #
-    #     for doc_id in Scores:
-    #         Scores[doc_id] /= self.doc_lengths_n[doc_id]
-    #
-    #     top_K_docs = heapq.nlargest(K, Scores.items(), key=lambda item: item[1])
-    #
-    #     return top_K_docs
 
 def generate_token_stream(documents: List[str] | Generator[str, Any, None]) -> Generator[Tuple[str, int], Any, None]:
     """
@@ -574,14 +555,15 @@ if __name__ == "__main__":
 
     documents = list(doc_dict.values())
     document_titles = list(doc_dict.keys())
-    spimi = SPIMI(block_size_limit=10000, force_reindex=False, documents=documents)
+    spimi = SPIMI(block_size_limit=10000, force_reindex=False, documents=documents, document_titles=document_titles)
 
     # put documents[9000] string of words into a list of words
     query_ = documents[9000].split()
+    query_title = document_titles[9000]
 
     # query_ = ["mario"]
     start_time = time.time()
-    top_docs = spimi.fast_cosine_score(query_, K=10)
+    top_docs = spimi.fast_cosine_score(query_, k=10, query_doc_title=query_title)
     print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
     print(f"\nTop documents for query '{query_}': {top_docs}")
 
@@ -608,7 +590,7 @@ if __name__ == "__main__":
     first_rocchio_iteration_query = spimi.rocchio_update(query_vector=original_query_vectorized, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
 
     # new_query is now a vector and no longer a list of words (this was needed for rocchio)
-    top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=first_rocchio_iteration_query)
+    top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=first_rocchio_iteration_query, query_doc_title=query_title)
 
     print("\n-------\nafter rocchio\n-------\n")
     for doc in top_docs_after_rocchio:
@@ -637,7 +619,7 @@ if __name__ == "__main__":
     second_rocchio_iteration_query = spimi.rocchio_update(query_vector=previous_query, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
 
     # new_query is now a vector and no longer a list of words (this was needed for rocchio)
-    top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=second_rocchio_iteration_query)
+    top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=second_rocchio_iteration_query, query_doc_title=query_title)
 
     print("\n-------\nafter rocchio\n-------\n")
     for doc in top_docs_after_rocchio:

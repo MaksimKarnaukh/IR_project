@@ -22,11 +22,19 @@ class SimpleGUI:
         similar_documents_titles, similar_documents = [], []
         if by_title:
             query_document = doc_dict[query]
-            similar_documents_titles, similar_documents, scores = self.retrieval_system.retrieve_similar_documents(
-                query_document, query, num_results)
+            if isinstance(query, str):
+                query_document = query_document.split()
+            similar_documents = self.retrieval_system.fast_cosine_score(query_document, k=10, query_doc_title=query)
+            similar_documents_titles = [self.retrieval_system.document_titles[tup[0]] for tup in similar_documents]
+            similar_documents = [tup[0] for tup in similar_documents]
+            print(similar_documents_titles, similar_documents)
         else:
-            similar_documents_titles, similar_documents, scores = self.retrieval_system.retrieve_similar_documents(query, "",
-                                                                                                              num_results)
+            if isinstance(query, str):
+                query = query.split()
+            similar_documents = self.retrieval_system.fast_cosine_score(query, k=10, query_doc_title=None)
+            similar_documents_titles = [self.retrieval_system.document_titles[tup[0]] for tup in similar_documents]
+            similar_documents = [tup[0] for tup in similar_documents]
+
         if by_title:
             title = query
             d = read_gt(variables.filepath_path_gt)  # Read ground truth
