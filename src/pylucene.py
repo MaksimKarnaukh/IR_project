@@ -14,7 +14,6 @@ from src import variables
 from src.utils import getDocDict
 
 
-
 class PyLuceneWrapper:
 
     def __init__(self, recreated_index=False, documents=None ):
@@ -25,12 +24,13 @@ class PyLuceneWrapper:
         # Initialize the index directory
         self.index_dir = None
         # set max clause count
-        BooleanQuery.setMaxClauseCount(2048*2)
+        BooleanQuery.setMaxClauseCount(2048*4)
 
         if recreated_index or not os.path.exists(self.indexpath()):
             self.create_index(documents)
         else:
             self.index_dir = FSDirectory.open(Paths.get(self.indexpath()))
+
     def create_index(self, documents):
         #     remove the index directory
         if os.path.exists(self.indexpath()):
@@ -40,7 +40,6 @@ class PyLuceneWrapper:
         #     create the index directory
         os.makedirs(self.indexpath())
         self.index_dir = FSDirectory.open(Paths.get(self.indexpath()))
-
 
         # Initialize the index writer
         config = IndexWriterConfig(self.analyzer)

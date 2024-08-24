@@ -103,11 +103,11 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
 
     return kappa
 
-def compare_with_lucene():
+def test_all_with_lucene():
     from pylucene import PyLuceneWrapper
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
     lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
-    retrievalsystem = SPIMI(block_size_limit=10000)
+    retrievalsystem = SPIMI(block_size_limit=10000, force_reindex=True, documents=list(doc_dict.values()), document_titles=list(doc_dict.keys()))
     # start timer
     start = time.time()
     metrics = {"precisions@": {3:[], 5:[], 10:[]}, "recalls@": {3:[], 5:[], 10:[]}}
@@ -116,6 +116,7 @@ def compare_with_lucene():
     doc_nr = 0
     document_titles = list(doc_dict.keys())
     for title, text in doc_dict.items():
+
         if doc_nr % 10 == 0 and doc_nr != 0:
             print(f"Document nr: {doc_nr} /", len(doc_dict))
             average_time = (time.time() - start) / (doc_nr+1)
@@ -126,7 +127,7 @@ def compare_with_lucene():
         doc_nr += 1
         start_time_ = time.time()
         # get the similar documents from the retrieval system
-        similar_documents = retrievalsystem.fast_cosine_score(text, K=10)
+        similar_documents = retrievalsystem.fast_cosine_score(text.split(), k=10)
         similar_documents_titles = [(document_titles[tup[0]], tup[1]) for tup in similar_documents]
 
         print(f"Retrieval system time: {time.time() - start_time_}")
@@ -212,4 +213,4 @@ if __name__ == '__main__':
     # testAll()
 
     # compare with lucene
-    compare_with_lucene()
+    test_all_with_lucene()

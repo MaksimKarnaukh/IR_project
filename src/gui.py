@@ -5,7 +5,7 @@ from test import calculatePrecisionAndRecall
 from utils import *
 from related_doc_retrieval import *
 from src import variables
-
+from pylucene import PyLuceneWrapper
 
 class SimpleGUI:
 
@@ -22,34 +22,42 @@ class SimpleGUI:
         similar_documents_titles, similar_documents = [], []
         if by_title:
             query_document = doc_dict[query]
-            if isinstance(query, str):
-                query_document = query_document.split()
-            similar_documents = self.retrieval_system.fast_cosine_score(query_document, k=10, query_doc_title=query)
+            query_document_split = query_document.split()
+            similar_documents = self.retrieval_system.fast_cosine_score(query_document_split, k=num_results, query_doc_title=query)
             similar_documents_titles = [self.retrieval_system.document_titles[tup[0]] for tup in similar_documents]
-            similar_documents = [tup[0] for tup in similar_documents]
-            print(similar_documents_titles, similar_documents)
+            # similar_documents = [tup[0] for tup in similar_documents]
         else:
+            query_document = query
             if isinstance(query, str):
                 query = query.split()
-            similar_documents = self.retrieval_system.fast_cosine_score(query, k=10, query_doc_title=None)
+            similar_documents = self.retrieval_system.fast_cosine_score(query, k=num_results, query_doc_title=None)
             similar_documents_titles = [self.retrieval_system.document_titles[tup[0]] for tup in similar_documents]
-            similar_documents = [tup[0] for tup in similar_documents]
+            # similar_documents = [tup[0] for tup in similar_documents]
+
+        expected_lucene = [tup[0] for tup in self.lucene_retrieval_system.search_index(query_document, num_results=num_results*2)]
+        par_lucene = calculatePrecisionAndRecall(expected_lucene, similar_documents_titles)
+
+
+        print(f"Expected Lucene: {expected_lucene}")
+        print(f"Own: {similar_documents_titles}")
 
         if by_title:
             title = query
             d = read_gt(variables.filepath_path_gt)  # Read ground truth
 
             if title not in d.keys():
-                return similar_documents_titles, similar_documents
+                return similar_documents_titles, similar_documents, par_lucene[0], par_lucene[1]
 
-            expected = list(d[title].keys())
-            par = calculatePrecisionAndRecall(expected, similar_documents_titles)
+            expected_gt = list(d[title].keys())
+            par_gt = calculatePrecisionAndRecall(expected_gt, similar_documents_titles) # compared to ground truth
 
-            return similar_documents_titles, similar_documents, par[0], par[1]
+            print(f"Expected GT: {expected_gt}")
 
-        return similar_documents_titles, similar_documents
+            return similar_documents_titles, similar_documents, par_gt[0], par_gt[1], par_lucene[0], par_lucene[1]
 
-    def center_window(self, window_width=650, window_height=700):
+        return similar_documents_titles, similar_documents, par_lucene[0], par_lucene[1]
+
+    def center_window(self, window_width=650, window_height=850):
         """
         Center the window on the screen.
         :param window_width: window width
@@ -72,25 +80,35 @@ class SimpleGUI:
             if self.num_results_entry.get().isdigit():
                 num_results = int(self.num_results_entry.get())
             result = self.return_similar_documents(self.doc_dict, input_text, by_title=by_title, num_results=num_results)
-            if len(result) == 4:
-                similar_documents_titles, similar_documents, par0, par1 = result
+
+            output_text2 = ""
+            if len(result) == 6:
+                similar_documents_titles, similar_documents, par0_gt, par1_gt, par0_lucene, par1_lucene = result
 
                 output_text1 = ""
-                output_text2 = f"Precision: {par0}\n" \
-                               f"Recall: {par1}\n"
+                output_text2 += f"vs Ground Truths:\n" \
+                               f"Precision: {par0_gt}\n" \
+                               f"Recall: {par1_gt}\n"
 
                 for i, doc in enumerate(similar_documents_titles, 1):
                     output_text1 += f"{i}. {doc}\n"
-                self.output_box1.insert(tk.END, output_text1 + "\n")
-                self.output_box2.insert(tk.END, output_text2 + "\n")
+                # self.output_box1.insert(tk.END, output_text1 + "\n")
+                # self.output_box2.insert(tk.END, output_text2 + "\n")
             else:
-                similar_documents_titles, similar_documents = result
+                similar_documents_titles, similar_documents, par0_lucene, par1_lucene = result
                 output_text1 = f""
-                output_text2 = f"Title not found in ground truth."
+                # output_text2 = f"Title not found in ground truth."
                 for i, doc in enumerate(similar_documents_titles, 1):
                     output_text1 += f"{i}. {doc}\n"
-                self.output_box1.insert(tk.END, output_text1 + "\n")
-                self.output_box2.insert(tk.END, output_text2 + "\n")
+                # self.output_box1.insert(tk.END, output_text1 + "\n")
+                # self.output_box2.insert(tk.END, output_text2 + "\n")
+
+            output_text2 += f"\nvs Lucene:\n" \
+                            f"Precision: {par0_lucene}\n" \
+                            f"Recall: {par1_lucene}\n"
+
+            self.output_box1.insert(tk.END, output_text1 + "\n")
+            self.output_box2.insert(tk.END, output_text2 + "\n")
 
         selected_option = self.choice_var.get()
 
@@ -113,6 +131,7 @@ class SimpleGUI:
         self.document_titles = list(doc_dict.keys())
 
         self.retrieval_system = retrieval_system
+        self.lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
 
         self.root = root
         root.title("Similar Documents Retrieval System")
@@ -165,7 +184,7 @@ class SimpleGUI:
         # Output Text Box
         self.output_label2 = ttk.Label(root, text="Performance statistics:", font=("Helvetica", 16))
         self.output_label2.pack()
-        self.output_box2 = tk.Text(root, height=5, width=60, wrap=tk.WORD, font=("Helvetica", 12))
+        self.output_box2 = tk.Text(root, height=8, width=60, wrap=tk.WORD, font=("Helvetica", 12))
         self.output_box2.pack(padx=10, pady=5)
 
 
