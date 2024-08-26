@@ -82,7 +82,9 @@ class SPIMI:
         else:
             self.load_index_data()
 
+        self.documents = documents
         self.document_titles = document_titles
+        self.previous_rocchio_iteration_query = None
 
     def create_index(self, documents: List[str] | Generator[str, Any, None]):
         start_time = time.time()
@@ -467,6 +469,48 @@ class SPIMI:
 
         return updated_vector
 
+    @staticmethod
+    def mark_as_relevant(list_of_relevant_indices: list, top_k_docs: list):
+        relevant_docs = []
+        for idx in list_of_relevant_indices:
+            print(f"Relevant doc: {top_k_docs[idx]}")
+            relevant_docs.append(top_k_docs[idx][0])
+
+        irrelevant_docs = [doc[0] for doc in top_k_docs if doc not in relevant_docs]
+        return relevant_docs, irrelevant_docs
+
+    def compute_tfidf_scores_for_doc_list(self, doc_list: list, documents):
+        tfidf_scores = []
+        for doc_id in doc_list:
+            tfidf_scores.append(self.compute_document_tfidf(documents[doc_id].split()))
+
+        return tfidf_scores
+
+    def rocchio_pipeline(self, list_of_relevant_indices, top_docs, query, query_title):
+
+        # obtain doc indices (not cosine score)
+        relevant_docs, irrelevant_docs = self.mark_as_relevant(list_of_relevant_indices=list_of_relevant_indices, top_k_docs=top_docs)
+
+        tfidf_relevant_docs = self.compute_tfidf_scores_for_doc_list(doc_list=relevant_docs, documents=self.documents)
+        tfidf_irrelevant_docs = self.compute_tfidf_scores_for_doc_list(doc_list=irrelevant_docs, documents=self.documents)
+
+        if self.previous_rocchio_iteration_query is None:
+            # relevant docs are expected to be the dictionary for key: term, value: tfidf
+            self.previous_rocchio_iteration_query = self.compute_document_tfidf(query)
+
+        # apply rocchio
+        rocchio_iteration_query = self.rocchio_update(query_vector=self.previous_rocchio_iteration_query,
+                                                             relevant_docs=tfidf_relevant_docs,
+                                                             non_relevant_docs=tfidf_irrelevant_docs)
+
+        self.previous_rocchio_iteration_query = rocchio_iteration_query
+
+        # new_query is now a vector and no longer a list of words (this was needed for rocchio)
+        top_docs_after_rocchio = self.fast_cosine_score(query_terms=rocchio_iteration_query,
+                                                         query_doc_title=query_title)
+
+        return top_docs_after_rocchio
+
 def generate_token_stream(documents: List[str] | Generator[str, Any, None]) -> Generator[Tuple[str, int], Any, None]:
     """
     Generate a stream of (term, doc_id) tuples from a list of documents.
@@ -519,21 +563,6 @@ def print_block_file(file_path):
             for doc_id, freq in postings.items():
                 print(f"    Doc ID: {doc_id}, Frequency: {freq}")
 
-# list_of_relevant_indices is verkregen uit de GUI
-def mark_as_relevant(list_of_relevant_indices: list, top_k_docs: list):
-    relevant_docs = []
-    for idx in list_of_relevant_indices:
-        relevant_docs.append(top_k_docs[idx][0])
-
-    irrelevant_docs = [doc[0] for doc in top_docs if doc not in relevant_docs]
-    return relevant_docs, irrelevant_docs
-
-def compute_tfidf_scores_for_doc_list(index: SPIMI, doc_list: list, documents):
-    tfidf_scores = []
-    for doc_id in doc_list:
-        tfidf_scores.append(index.compute_document_tfidf(documents[doc_id].split()))
-
-    return tfidf_scores
 
 # Example usage
 if __name__ == "__main__":
@@ -565,7 +594,7 @@ if __name__ == "__main__":
     start_time = time.time()
     top_docs = spimi.fast_cosine_score(query_, k=10, query_doc_title=query_title)
     print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
-    print(f"\nTop documents for query '{query_}': {top_docs}")
+    print(f"\nTop documents for query '{query_title}': {top_docs}")
 
     for doc in top_docs:
         print(document_titles[doc[0]])
@@ -577,20 +606,22 @@ if __name__ == "__main__":
     This will challenge rocchio to find documents that are more closely related to the bottom 5 of the top 10
     """
 
-    # obtain doc indices (not cosine score)
-    relevant_docs, irrelevant_docs = mark_as_relevant(list_of_relevant_indices=[6, 8, 9], top_k_docs=top_docs)
+    # # obtain doc indices (not cosine score)
+    # relevant_docs, irrelevant_docs = spimi.mark_as_relevant(list_of_relevant_indices=[6, 8, 9], top_k_docs=top_docs)
+    #
+    # tfidf_relevant_docs = spimi.compute_tfidf_scores_for_doc_list(doc_list=relevant_docs, documents=documents)
+    # tfidf_irrelevant_docs = spimi.compute_tfidf_scores_for_doc_list(doc_list=irrelevant_docs, documents=documents)
+    #
+    # # relevant docs are expected to be the dictionary for key: term, value: tfidf
+    # original_query_vectorized = spimi.compute_document_tfidf(query_)
+    #
+    # # apply rocchio
+    # first_rocchio_iteration_query = spimi.rocchio_update(query_vector=original_query_vectorized, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
+    #
+    # # new_query is now a vector and no longer a list of words (this was needed for rocchio)
+    # top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=first_rocchio_iteration_query, query_doc_title=query_title)
 
-    tfidf_relevant_docs = compute_tfidf_scores_for_doc_list(spimi, doc_list=relevant_docs, documents=documents)
-    tfidf_irrelevant_docs = compute_tfidf_scores_for_doc_list(spimi, doc_list=irrelevant_docs, documents=documents)
-
-    # relevant docs are expected to be the dictionary for key: term, value: tfidf
-    original_query_vectorized = spimi.compute_document_tfidf(query_)
-
-    # apply rocchio
-    first_rocchio_iteration_query = spimi.rocchio_update(query_vector=original_query_vectorized, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
-
-    # new_query is now a vector and no longer a list of words (this was needed for rocchio)
-    top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=first_rocchio_iteration_query, query_doc_title=query_title)
+    top_docs_after_rocchio = spimi.rocchio_pipeline(list_of_relevant_indices=[6, 8, 9], top_docs=top_docs, query=query_, query_title=query_title)
 
     print("\n-------\nafter rocchio\n-------\n")
     for doc in top_docs_after_rocchio:
@@ -603,23 +634,25 @@ if __name__ == "__main__":
     In Rocchio, you pass a vector so in the next Rocchio iteration, this will still be a vector
     """
 
-    # obtain doc indices (not cosine score)
-    relevant_docs, irrelevant_docs = mark_as_relevant(list_of_relevant_indices=[2], top_k_docs=top_docs)
+    # # obtain doc indices (not cosine score)
+    # relevant_docs, irrelevant_docs = spimi.mark_as_relevant(list_of_relevant_indices=[2], top_k_docs=top_docs)
+    #
+    # tfidf_relevant_docs = spimi.compute_tfidf_scores_for_doc_list(doc_list=relevant_docs, documents=documents)
+    # tfidf_irrelevant_docs = spimi.compute_tfidf_scores_for_doc_list(doc_list=irrelevant_docs, documents=documents)
+    #
+    # # DONT DO ANYTHING WITH VECTORIZING
+    # #original_query_vectorized = spimi.compute_document_tfidf(query_)
+    #
+    # # THE NEXT 'query_vector' IS THE PREVIOUS ROCCHIO QUERY WHICH IS CALLED 'new_query_for_rocchio'
+    # previous_query = first_rocchio_iteration_query
+    #
+    # # apply rocchio again
+    # second_rocchio_iteration_query = spimi.rocchio_update(query_vector=previous_query, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
+    #
+    # # new_query is now a vector and no longer a list of words (this was needed for rocchio)
+    # top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=second_rocchio_iteration_query, query_doc_title=query_title)
 
-    tfidf_relevant_docs = compute_tfidf_scores_for_doc_list(spimi, doc_list=relevant_docs, documents=documents)
-    tfidf_irrelevant_docs = compute_tfidf_scores_for_doc_list(spimi, doc_list=irrelevant_docs, documents=documents)
-
-    # DONT DO ANYTHING WITH VECTORIZING
-    #original_query_vectorized = spimi.compute_document_tfidf(query_)
-
-    # THE NEXT 'query_vector' IS THE PREVIOUS ROCCHIO QUERY WHICH IS CALLED 'new_query_for_rocchio'
-    previous_query = first_rocchio_iteration_query
-
-    # apply rocchio again
-    second_rocchio_iteration_query = spimi.rocchio_update(query_vector=previous_query, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
-
-    # new_query is now a vector and no longer a list of words (this was needed for rocchio)
-    top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=second_rocchio_iteration_query, query_doc_title=query_title)
+    top_docs_after_rocchio = spimi.rocchio_pipeline(list_of_relevant_indices=[2], top_docs=top_docs, query=query_, query_title=query_title)
 
     print("\n-------\nafter rocchio\n-------\n")
     for doc in top_docs_after_rocchio:
