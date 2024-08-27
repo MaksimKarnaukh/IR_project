@@ -131,7 +131,7 @@ def test_all_with_lucene():
     # start timer
     start = time.time()
     ks = [3,5,10]
-    metrics = {"precisions@": {}, "recalls@": {}}
+    metrics = {"precisions@": {}, "recalls@": {}, "kappas@": {}}
     for k in ks:
         metrics[f"precisions@"][k] = []
         metrics[f"recalls@"][k] = []
@@ -174,9 +174,11 @@ def test_all_with_lucene():
         for k in ks:
             precision = calculate_average_precision(expected=expected, retrieved=retrieved, k=k)
             recall = calculate_recall(expected=expected, retrieved=retrieved, k=k)
+            kappa = calculateKappa(expected_pairs=expected_dict, retrieved_pairs=retrieved_dict, nr_of_docs=k)
 
             metrics[f"precisions@"][k].append(precision)
             metrics[f"recalls@"][k].append(recall)
+            metrics[f"kappas@"][k].append(kappa)
     print('\n')
     for k in ks:
         print(f"Mean Average precision@{k}: ", sum(metrics["precisions@"][k])/len(metrics["precisions@"][k]))
