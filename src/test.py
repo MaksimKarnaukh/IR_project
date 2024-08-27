@@ -28,17 +28,8 @@ def calculatePrecisionAndRecall(expected, retrieved, k=0) -> tuple:
     """
     if k != 0:
         retrieved = retrieved[:k]
-        expected = expected[:k]
+    TP, FP, FN = calculate_confusion_matrix(expected, retrieved)
 
-
-    # number of retrieved values that are also in expected (True positive)
-    TP = len([ret for ret in retrieved if ret in expected])
-
-    # number of retrieved values that aren't in expected (False positive)
-    FP = len([ret for ret in retrieved if ret not in expected])
-
-    # number of expected values that aren't retrieved (False negative)
-    FN = len([ex for ex in expected if ex not in retrieved])
 
     # precision and recall calculation (by formula)
     precision = TP/(TP+FP) if TP+FP != 0 else 0
@@ -117,7 +108,7 @@ def test_all_with_lucene():
     document_titles = list(doc_dict.keys())
     for title, text in doc_dict.items():
 
-        if doc_nr % 10 == 0 and doc_nr != 0:
+        if doc_nr % 100 == 0 and doc_nr != 0:
             print(f"Document nr: {doc_nr} /", len(doc_dict))
             average_time = (time.time() - start) / (doc_nr+1)
             print(f"Average time per document: {average_time}")
@@ -130,11 +121,11 @@ def test_all_with_lucene():
         similar_documents = retrievalsystem.fast_cosine_score(text.split(), k=10)
         similar_documents_titles = [(document_titles[tup[0]], tup[1]) for tup in similar_documents]
 
-        print(f"Retrieval system time: {time.time() - start_time_}")
+        # print(f"Retrieval system time: {time.time() - start_time_}")
         # get the similar documents from the lucene system
-        start_time_lucene = time.time()
-        similar_documents_lucene = lucene_retrieval_system.search_index(text, 10)
-        print(f"Lucene time: {time.time() - start_time_lucene}")
+        # start_time_lucene = time.time()
+        similar_documents_lucene = lucene_retrieval_system.search_index(text, RELEVANT_NR_DOCS_LUCENE)
+        # print(f"Lucene time: {time.time() - start_time_lucene}")
 
         expected = [tup[0] for tup in similar_documents_lucene]
         retrieved = [tup[0] for tup in similar_documents_titles]
@@ -144,8 +135,24 @@ def test_all_with_lucene():
             precision, recall = calculatePrecisionAndRecall(expected=expected, retrieved=retrieved, k=k)
             metrics[f"precisions@"][k].append(precision)
             metrics[f"recalls@"][k].append(recall)
+    print('\n')
+    for k in ks:
+        print(f"Mean Average precision@{k}: ", sum(metrics["precisions@"][k])/len(metrics["precisions@"][k]))
+        print(f"Average recall@{k}: ", sum(metrics["recalls@"][k])/len(metrics["recalls@"][k]))
 
-def testAll():
+    # print("Mean Average precision: ", sum(metrics["precisions"])/len(metrics["precisions"]))
+    # print("Average recall: ", sum(metrics["recalls"])/len(metrics["recalls"]))
+    # print("Average F1 score: ", sum(metrics["F1 scores"])/len(metrics["F1 scores"]))
+    print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
+
+    # write the metrics to a file
+    with open(variables.metrics_output_file, "w") as file:
+        for k in ks:
+            file.write(f"Mean Average precision@{k}: {sum(metrics['precisions@'][k])/len(metrics['precisions@'][k])}\n")
+            file.write(f"Average recall@{k}: {sum(metrics['recalls@'][k])/len(metrics['recalls@'][k])}\n")
+        file.write(f"Average kappa: {sum(metrics['kappas']) / len(metrics['kappas'])}\n")
+
+def test_all():
     """
     Test the retrieval system.
     Print the average precision, recall, F1 score and kappa.
@@ -210,7 +217,7 @@ if __name__ == '__main__':
     # calculateIntraListSimilarity([1, 2, 3], [1, 2, 3])
 
     # test the retrieval system
-    # testAll()
+    # test_all()
 
     # compare with lucene
     test_all_with_lucene()

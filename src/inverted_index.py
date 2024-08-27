@@ -313,19 +313,19 @@ class SPIMI:
         Returns:
             dict: The posting list for the term, or None if the term is not found.
         """
-        if term in self.term_positions:
-            offset = self.term_positions[term]
-            block_filename = os.path.join(self.output_dir, 'inverted_index.bin')
-            with open(block_filename, 'rb') as f:
-                f.seek(offset)
-                term_length = struct.unpack('I', f.read(4))[0]
-                f.read(term_length)  # Skip term
-                postings_length = struct.unpack('I', f.read(4))[0]
-                postings = pickle.loads(f.read(postings_length))
-                return postings
-        else:
-            return None
-        # return self.inv_index_in_mem.get(term, None)
+        # if term in self.term_positions:
+        #     offset = self.term_positions[term]
+        #     block_filename = os.path.join(self.output_dir, 'inverted_index.bin')
+        #     with open(block_filename, 'rb') as f:
+        #         f.seek(offset)
+        #         term_length = struct.unpack('I', f.read(4))[0]
+        #         f.read(term_length)  # Skip term
+        #         postings_length = struct.unpack('I', f.read(4))[0]
+        #         postings = pickle.loads(f.read(postings_length))
+        #         return postings
+        # else:
+        #     return None
+        return self.inv_index_in_mem.get(term, None)
 
     def save_index_data(self):
         """
@@ -486,7 +486,7 @@ class SPIMI:
 
         return tfidf_scores
 
-    def rocchio_pipeline(self, list_of_relevant_indices, top_docs, query, query_title):
+    def rocchio_pipeline(self, list_of_relevant_indices, top_docs, query, query_title, first_rocchio=False):
 
         # obtain doc indices (not cosine score)
         relevant_docs, irrelevant_docs = self.mark_as_relevant(list_of_relevant_indices=list_of_relevant_indices, top_k_docs=top_docs)
@@ -494,7 +494,7 @@ class SPIMI:
         tfidf_relevant_docs = self.compute_tfidf_scores_for_doc_list(doc_list=relevant_docs, documents=self.documents)
         tfidf_irrelevant_docs = self.compute_tfidf_scores_for_doc_list(doc_list=irrelevant_docs, documents=self.documents)
 
-        if self.previous_rocchio_iteration_query is None:
+        if self.previous_rocchio_iteration_query is None or first_rocchio:
             # relevant docs are expected to be the dictionary for key: term, value: tfidf
             self.previous_rocchio_iteration_query = self.compute_document_tfidf(query)
 
