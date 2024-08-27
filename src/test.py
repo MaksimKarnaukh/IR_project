@@ -5,21 +5,38 @@ from src.related_doc_retrieval import RelatedDocumentsRetrieval
 from utils import *
 import time
 import variables
-# from sklearn.metrics.pairwise import cosine_similarity
-def cosine_similarity(v1, v2) -> float:
-    return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
 
-def calculateIntraListSimilarity(expected, retrieved) -> float:
-    ILS = 0
-    similarities = cosine_similarity( retrieved, expected)
-    ILS += similarities.sum()
-    ILS /= len(retrieved) * (len(retrieved) - 1) / 2
-    return ILS
+def calculate_confusion_matrix(expected,retrieved):
+    # number of retrieved values that are also in expected (True positive)
+    TP = len([ret for ret in retrieved if ret in expected])
+    # number of retrieved values that aren't in expected (False positive)
+    FP = len([ret for ret in retrieved if ret not in expected])
+    # number of expected values that aren't retrieved (False negative)
+    FN = len([ex for ex in expected if ex not in retrieved])
 
-def calculatePrecisionAndRecall(expected, retrieved, k=0) -> tuple:
+    return TP,FP,FN
+
+def calculate_precision(expected, retrieved, k=0) -> float:
     """
     • P(recision) = TP/(TP+FP) how much correct of found
+    :param expected: list of expected values (ground truth labels)
+    :param retrieved: list of retrieved values (our algorithm)
+    :param k: cut-off value (top k retrieved values)
+    :return: tuple(precision, recall)
+    """
+    if k != 0:
+        retrieved = retrieved[:k]
+    TP, FP, FN = calculate_confusion_matrix(expected, retrieved)
+
+
+    # precision calculation (by formula)
+    precision = TP/(TP+FP) if TP+FP != 0 else 0
+
+    return precision
+
+def calculate_recall(expected, retrieved, k=0):
+    """
     • R(ecall) = TP/(TP+FN) how much of correct
     :param expected: list of expected values (ground truth labels)
     :param retrieved: list of retrieved values (our algorithm)
@@ -31,12 +48,22 @@ def calculatePrecisionAndRecall(expected, retrieved, k=0) -> tuple:
     TP, FP, FN = calculate_confusion_matrix(expected, retrieved)
 
 
-    # precision and recall calculation (by formula)
-    precision = TP/(TP+FP) if TP+FP != 0 else 0
+    # recall calculation (by formula)
     recall = TP/(TP+FN) if TP+FN != 0 else 0
 
-    return precision, recall
+    return recall
 
+def calculate_average_precision(expected, retrieved, k=0):
+    if k == 0:
+        k = len(retrieved)
+    average_precision_at_k = 0
+    for i in range(0, k):
+        if retrieved[i] in expected:
+            precision_at_k = calculate_precision(expected, retrieved, k=i+1)
+            average_precision_at_k += precision_at_k
+    average_precision_at_k /= k
+
+    return average_precision_at_k
 
 def calculateF1score(precision, recall) -> float:
     """
@@ -96,12 +123,19 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
 
 def test_all_with_lucene():
     from pylucene import PyLuceneWrapper
+    RELEVANT_NR_DOCS_LUCENE = 20
+
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
     lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
     retrievalsystem = SPIMI(block_size_limit=10000, force_reindex=True, documents=list(doc_dict.values()), document_titles=list(doc_dict.keys()))
     # start timer
     start = time.time()
-    metrics = {"precisions@": {3:[], 5:[], 10:[]}, "recalls@": {3:[], 5:[], 10:[]}}
+    ks = [3,5,10]
+    metrics = {"precisions@": {}, "recalls@": {}}
+    for k in ks:
+        metrics[f"precisions@"][k] = []
+        metrics[f"recalls@"][k] = []
+
     print("Start comparing with lucene")
     # loop over all the documents
     doc_nr = 0
@@ -131,8 +165,10 @@ def test_all_with_lucene():
         retrieved = [tup[0] for tup in similar_documents_titles]
 
         # calculate the metrics
-        for k in metrics["precisions@"]:
-            precision, recall = calculatePrecisionAndRecall(expected=expected, retrieved=retrieved, k=k)
+        for k in ks:
+            precision = calculate_average_precision(expected=expected, retrieved=retrieved, k=k)
+            recall = calculate_recall(expected=expected, retrieved=retrieved, k=k)
+
             metrics[f"precisions@"][k].append(precision)
             metrics[f"recalls@"][k].append(recall)
     print('\n')
@@ -190,7 +226,7 @@ def test_all():
 
             # calculate the metrics
             score_dict = dict(zip(similar_documents_titles, scores))
-            par = calculatePrecisionAndRecall(similar_documents_gt, similar_documents_titles)
+            par = calculate_precision(similar_documents_gt, similar_documents_titles), calculate_recall(similar_documents_gt, similar_documents_titles)
             # add the metrics to the dictionary
             metrics["precisions"].append(par[0])
             metrics["recalls"].append(par[1])

@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from test import calculatePrecisionAndRecall
+from test import calculate_precision, calculate_recall
 from utils import *
 from src import variables
 from pylucene import PyLuceneWrapper
@@ -31,7 +31,7 @@ class SimpleGUI:
             similar_documents_titles = [self.retrieval_system.document_titles[tup[0]] for tup in similar_documents]
 
         expected_lucene = [tup[0] for tup in self.lucene_retrieval_system.search_index(query_document, num_results=num_results*2)]
-        par_lucene = calculatePrecisionAndRecall(expected_lucene, similar_documents_titles)
+        par_lucene = calculate_precision(expected_lucene, similar_documents_titles), calculate_recall(expected_lucene, similar_documents_titles)
 
         print(f"Expected Lucene: {expected_lucene}")
         print(f"Own: {similar_documents_titles}")
@@ -44,7 +44,7 @@ class SimpleGUI:
                 return similar_documents_titles, similar_documents, par_lucene[0], par_lucene[1]
 
             expected_gt = list(d[title].keys())
-            par_gt = calculatePrecisionAndRecall(expected_gt, similar_documents_titles)  # compared to ground truth
+            par_gt = calculate_precision(expected_gt, similar_documents_titles), calculate_recall(expected_gt, similar_documents_titles)
 
             print(f"Expected GT: {expected_gt}")
 
