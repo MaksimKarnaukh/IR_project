@@ -176,17 +176,14 @@ def test_all_with_lucene():
         print(f"Mean Average precision@{k}: ", sum(metrics["precisions@"][k])/len(metrics["precisions@"][k]))
         print(f"Average recall@{k}: ", sum(metrics["recalls@"][k])/len(metrics["recalls@"][k]))
 
-    # print("Mean Average precision: ", sum(metrics["precisions"])/len(metrics["precisions"]))
-    # print("Average recall: ", sum(metrics["recalls"])/len(metrics["recalls"]))
-    # print("Average F1 score: ", sum(metrics["F1 scores"])/len(metrics["F1 scores"]))
-    print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
+    # print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
 
     # write the metrics to a file
     with open(variables.metrics_output_file, "w") as file:
         for k in ks:
             file.write(f"Mean Average precision@{k}: {sum(metrics['precisions@'][k])/len(metrics['precisions@'][k])}\n")
             file.write(f"Average recall@{k}: {sum(metrics['recalls@'][k])/len(metrics['recalls@'][k])}\n")
-        file.write(f"Average kappa: {sum(metrics['kappas']) / len(metrics['kappas'])}\n")
+        # file.write(f"Average kappa: {sum(metrics['kappas']) / len(metrics['kappas'])}\n")
 
 def test_all():
     """

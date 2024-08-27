@@ -24,7 +24,7 @@ class PyLuceneWrapper:
         # Initialize the index directory
         self.index_dir = None
         # set max clause count
-        BooleanQuery.setMaxClauseCount(2048*4)
+        BooleanQuery.setMaxClauseCount(2048*10)
 
         if recreated_index or not os.path.exists(self.indexpath()):
             self.create_index(documents)
