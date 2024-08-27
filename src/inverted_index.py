@@ -255,7 +255,7 @@ class SPIMI:
         block_files: List[str] = []
 
         for term, doc_id in token_stream:
-            self.doc_count = max(self.doc_count, doc_id + 1)
+            self.doc_count = max(self.doc_count, doc_id + 1) # ¯\_(ツ)_/¯
             if term not in self.dictionary:
 
                 if self.token_count + 1 > self.block_size_limit:

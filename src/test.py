@@ -65,17 +65,17 @@ def calculate_average_precision(expected, retrieved, k=0):
 
     return average_precision_at_k
 
-def calculateF1score(precision, recall) -> float:
-    """
-    F1 score calculation (by formula)
-    F1 = 2*P*R/(P+R)
-    :param precision: P
-    :param recall: R
-    :return: F1 score
-    """
-    # F1 score calculation (by formula)
-    F1_score = (2*precision*recall) + (precision+recall)
-    return F1_score
+# def calculateF1score(precision, recall) -> float:
+#     """
+#     F1 score calculation (by formula)
+#     F1 = 2*P*R/(P+R)
+#     :param precision: P
+#     :param recall: R
+#     :return: F1 score
+#     """
+#     # F1 score calculation (by formula)
+#     F1_score = (2*precision*recall) + (precision+recall)
+#     return F1_score
 
 
 def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, relevance_threshold=0.7):
@@ -135,6 +135,7 @@ def test_all_with_lucene():
     for k in ks:
         metrics[f"precisions@"][k] = []
         metrics[f"recalls@"][k] = []
+        metrics[f"kappas@"][k] = []
 
     print("Start comparing with lucene")
     # loop over all the documents
@@ -149,6 +150,9 @@ def test_all_with_lucene():
             docs_left = len(doc_dict) - doc_nr
             print(f"Time left: {average_time * docs_left}")
             print(f"Average precision@3: {sum(metrics['precisions@'][3]) / len(metrics['precisions@'][3])}")
+            print(f"Average kappa@3: {sum(metrics['kappas@'][3]) / len(metrics['kappas@'][3])}")
+            print(f"Average kappa@5: {sum(metrics['kappas@'][5]) / len(metrics['kappas@'][5])}")
+            print(f"Average kappa@10: {sum(metrics['kappas@'][10]) / len(metrics['kappas@'][10])}")
         doc_nr += 1
         start_time_ = time.time()
         # get the similar documents from the retrieval system
@@ -162,7 +166,9 @@ def test_all_with_lucene():
         # print(f"Lucene time: {time.time() - start_time_lucene}")
 
         expected = [tup[0] for tup in similar_documents_lucene]
+        expected_dict = dict(similar_documents_lucene)
         retrieved = [tup[0] for tup in similar_documents_titles]
+        retrieved_dict = dict(similar_documents_titles)
 
         # calculate the metrics
         for k in ks:
@@ -212,14 +218,12 @@ def test_all():
     # test the retrieval systems
     for retrievalsystem in [retrieval_system, retrieval_system_scipi]:
         # initialize the metrics
-        metrics = {"precisions": [], "recalls": [], "F1 scores": [], "kappas": []}
+        metrics = {"precisions": [], "recalls": [], "kappas": []}
         # loop over the ground truth labels
         for title, similar_documents_gt in ground_truth_labels.items():
             # retrieve similar documents
             query_document = doc_dict[title]
             similar_documents_titles, similar_documents, scores = retrievalsystem.retrieve_similar_documents(query_document, title, 10)
-
-
 
             # calculate the metrics
             score_dict = dict(zip(similar_documents_titles, scores))
@@ -227,23 +231,25 @@ def test_all():
             # add the metrics to the dictionary
             metrics["precisions"].append(par[0])
             metrics["recalls"].append(par[1])
+
             # calculate the F1 score
-            F1 = calculateF1score(par[0], par[1])
+            # F1 = calculateF1score(par[0], par[1])
             # add the F1 score to the dictionary
-            metrics["F1 scores"].append(F1)
+            # metrics["F1 scores"].append(F1)
+
             # calculate the kappa
             ones = [1] * len(similar_documents_gt)
             scored_gt = dict(zip(similar_documents_gt, ones))
             kappa = calculateKappa(scored_gt, score_dict, nr_of_docs=len(documents))
             # add the kappa to the dictionary
             metrics["kappas"].append(kappa)
+
         # print the metrics
         print('\n')
         print("Average precision: ", sum(metrics["precisions"])/len(metrics["precisions"]))
         print("Average recall: ", sum(metrics["recalls"])/len(metrics["recalls"]))
         print("Average F1 score: ", sum(metrics["F1 scores"])/len(metrics["F1 scores"]))
         print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
-
 
 
 if __name__ == '__main__':
