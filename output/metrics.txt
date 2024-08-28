@@ -1,0 +1,22 @@
+Mean Average precision@3: 0.6858028180809167
+Average recall@3: 0.2095251554550545
+Average kappa@3: 0.2149783017204353
+Mean Average precision@5: 0.5423225613969092
+Average recall@5: 0.2878650838515143
+Average kappa@5: 0.08495152716104336
+Mean Average precision@10: 0.3605995843315744
+Average recall@10: 0.4212643678160925
+Average kappa@10: -0.046576692649041865
+
+----------
+Mean Average precision@3: 0.7445250507714853
+Average recall@3: 0.11332673827021764
+Average kappa@3: 0.2149783017204353
+Mean Average precision@5: 0.6199701651906365
+Average recall@5: 0.1627802901827733
+Average kappa@5: 0.08495152716104336
+Mean Average precision@10: 0.45501806538833844
+Average recall@10: 0.2580671754286767
+Average kappa@10: -0.06153025105830688
+
+----------
