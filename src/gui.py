@@ -40,7 +40,7 @@ class SimpleGUI:
         par_lucene = calculate_precision(expected_lucene, similar_documents_titles), calculate_recall(expected_lucene, similar_documents_titles)
 
         print(f"Expected Lucene: {expected_lucene}")
-        print(f"Own: {similar_documents_titles}")
+        print(f"Retrieved: {similar_documents_titles}")
 
         if by_title:
             title = query
