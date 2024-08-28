@@ -54,10 +54,14 @@ def calculate_precision(expected, retrieved, k=0) -> float:
 def calculate_recall(expected, retrieved, k=0):
     """
     • R(ecall) = TP/(TP+FN) how much of correct
-    :param expected: list of expected values (ground truth labels)
-    :param retrieved: list of retrieved values (our algorithm)
-    :param k: cut-off value (top k retrieved values)
-    :return: tuple(precision, recall)
+
+    Args:
+        expected (list): list of expected values (ground truth labels)
+        retrieved (list): list of retrieved values (our algorithm)
+        k (int): cut-off value (top k retrieved values)
+
+    Returns:
+        float: recall
     """
     if k != 0:
         retrieved = retrieved[:k]
@@ -70,6 +74,17 @@ def calculate_recall(expected, retrieved, k=0):
 
 
 def calculate_average_precision(expected, retrieved, k=0):
+    """
+    Calculate the average precision at k.
+
+    Args:
+        expected (list): list of expected values (ground truth labels)
+        retrieved (list): list of retrieved values (our algorithm)
+        k (int): cut-off value (top k retrieved values)
+
+    Returns:
+        float: average precision
+    """
     if k == 0:
         k = len(retrieved)
     average_precision_at_k = 0
@@ -81,28 +96,19 @@ def calculate_average_precision(expected, retrieved, k=0):
 
     return average_precision_at_k
 
-
-# def calculateF1score(precision, recall) -> float:
-#     """
-#     F1 score calculation (by formula)
-#     F1 = 2*P*R/(P+R)
-#     :param precision: P
-#     :param recall: R
-#     :return: F1 score
-#     """
-#     # F1 score calculation (by formula)
-#     F1_score = (2*precision*recall) + (precision+recall)
-#     return F1_score
-
-
 def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, relevance_threshold=0.85):
     """
-    kappa >= 2/3 is good
-    :param expected_pairs: expected key-val pairs: key=doc_name, val=relevance_score
-    :param retrieved_pairs: retrieved key-val pairs: key=doc_name, val=relevance_score
-    :param nr_of_docs: total number of docs taken into consideration
-    :param relevance_threshold: min relevance score of our retrieved documents
-    :return: kappa value
+    Calculate the Cohen's Kappa value.
+    kappa >= 2/3 is good.
+
+    Args:
+        expected_pairs (dict): expected key-val pairs: key=doc_name, val=relevance_score
+        retrieved_pairs (dict): retrieved key-val pairs: key=doc_name, val=relevance_score
+        nr_of_docs (int): total number of docs taken into consideration
+        relevance_threshold (float): min relevance score of our retrieved documents
+
+    Returns:
+        float: kappa value
     """
     relevant_retrieved_pairs = {}
     old = copy.deepcopy(expected_pairs)
@@ -148,18 +154,18 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
     else:
         kappa = (P0 - Pe) / (1 - Pe)
 
-    # if kappa > 1:
-    #     # print(expected_pairs)
-    #     #print(Pe)
-    #     if Pe == 2.0:
-    #         b = 2
-    #     a = 2
-    # print(kappa)
-
     return kappa
 
-
 def initialize_metrics(ks):
+    """
+    Initializes the metrics dictionary.
+
+    Args:
+        ks (list): list of k values
+
+    Returns:
+        dict: metrics dictionary (precisions@, recalls@, kappas@)
+    """
     metrics = {"precisions@": {}, "recalls@": {}, "kappas@": {}}
     for k in ks:
         metrics[f"precisions@"][k] = []
@@ -168,20 +174,24 @@ def initialize_metrics(ks):
 
     return metrics
 
-
-def test_all_with_lucene():
+def test_all_with_lucene() -> None:
+    """
+    Test the retrieval system against the lucene retrieval system.
+    Results are written to a file.
+    """
     from pylucene import PyLuceneWrapper
+
     all_metrics = []
     ks = [3, 5, 10]
-    LUCENE_RELEVANT_NR_DOCS_LIST = [10, 20]
+    LUCENE_RELEVANT_NR_DOCS_LIST = [10, 20] # number of relevant documents to retrieve from lucene
+
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
     lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
     retrievalsystem = SPIMI(block_size_limit=10000, force_reindex=True, documents=list(doc_dict.values()),
-                            document_titles=list(doc_dict.keys()))
+                            document_titles=list(doc_dict.keys())) # our retrieval system
 
     for RELEVANT_NR_DOCS_LUCENE in LUCENE_RELEVANT_NR_DOCS_LIST:
 
-        # start timer
         start = time.time()
         metrics = initialize_metrics(ks)
 
@@ -197,17 +207,14 @@ def test_all_with_lucene():
                 print(f"Average time per document: {average_time}")
                 docs_left = len(doc_dict) - doc_nr
                 print(f"Time left: {average_time * docs_left}")
+
             doc_nr += 1
-            start_time_ = time.time()
+
             # get the similar documents from the retrieval system
             similar_documents = retrievalsystem.fast_cosine_score(text.split(), k=10)
             similar_documents_titles = [(document_titles[tup[0]], tup[1]) for tup in similar_documents]
 
-            # print(f"Retrieval system time: {time.time() - start_time_}")
-            # get the similar documents from the lucene system
-            # start_time_lucene = time.time()
             similar_documents_lucene = lucene_retrieval_system.search_index(text, RELEVANT_NR_DOCS_LUCENE)
-            # print(f"Lucene time: {time.time() - start_time_lucene}")
 
             expected = [tup[0] for tup in similar_documents_lucene]
             expected_dict = dict(similar_documents_lucene)
@@ -232,7 +239,6 @@ def test_all_with_lucene():
 
         all_metrics.append(metrics)
 
-    # print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
     # write the metrics to a file
     with open(variables.metrics_output_file, "w") as file:
         for metric in all_metrics:
@@ -243,7 +249,14 @@ def test_all_with_lucene():
                 file.write(f"Average kappa@{k}: {sum(metric['kappas@'][k]) / len(metric['kappas@'][k])}\n")
             file.write("\n----------\n")
 
-def plot_metrics(metrics, ks):
+def plot_metrics(metrics, ks) -> None:
+    """
+    Plot the metrics.
+
+    Args:
+        metrics (dict): metrics dictionary
+        ks (list): list of k values
+    """
     import matplotlib.pyplot as plt
     system_retrieval_names = metrics.keys()
 
@@ -262,6 +275,7 @@ def plot_metrics(metrics, ks):
             plt.legend()
             plt.title(f"{group} metrics for k={k}")
             plt.savefig(f"{variables.metric_plot_path}metrics_{group}_{k}.png")
+
     system_retrieval_names = [group['retrieval_system_name'] for group in metrics.values()]
     for k in ks:
         x = np.arange(len(system_retrieval_names))  # the label locations
@@ -284,6 +298,7 @@ def plot_metrics(metrics, ks):
             rects = ax.bar(x + offset, measurement, width, label=attribute)
             ax.bar_label(rects, padding=3)
             multiplier += 1
+
         plt.title(f"Average metrics for k={k}")
         ax.set_ylabel('Score')
 
@@ -292,11 +307,10 @@ def plot_metrics(metrics, ks):
         plt.legend()
         plt.savefig(f"{variables.metric_plot_path}metrics_{k}.png")
 
-
 def test_all():
     """
-    Test the retrieval system.
-    Print the average precision, recall, F1 score and kappa.
+    Test the retrieval system against the ground truth labels.
+    Print the average precision, recall and kappa.
     """
     from pylucene import PyLuceneWrapper
     ks = [3, 5, 10]
@@ -307,9 +321,10 @@ def test_all():
 
     # initialize the retrieval systems
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
-    lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
+    lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict) # lucene retrieval system
     retrievalsystem = SPIMI(block_size_limit=10000, force_reindex=True, documents=list(doc_dict.values()),
-                            document_titles=list(doc_dict.keys()))
+                            document_titles=list(doc_dict.keys())) # our retrieval system
+
     metrics = {"lucene": initialize_metrics(ks), "spimi": initialize_metrics(ks)}
     metrics["spimi"]["retrieval_system_name"] = "SPIMI"
     metrics["lucene"]["retrieval_system_name"] = "Lucene"
@@ -379,8 +394,8 @@ if __name__ == '__main__':
 
     ### test the retrieval system ###
 
-    # compare with ground truths
+    # compare our system and lucene's with ground truths
     # test_all()
 
     # compare with lucene
-    test_all()
+    test_all_with_lucene()
