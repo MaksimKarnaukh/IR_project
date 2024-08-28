@@ -4,17 +4,23 @@ from test import calculate_precision, calculate_recall
 from utils import *
 from src import variables
 from pylucene import PyLuceneWrapper
+from data_preprocessor import DataPreprocessor
+from typing import List, Tuple, Dict, BinaryIO, Generator, Any
 
 class SimpleGUI:
 
-    def return_similar_documents(self, doc_dict, query: str, by_title: bool = False, num_results: int = 10):
+    def return_similar_documents(self, doc_dict: Dict[str, str], query: str, by_title: bool = False, num_results: int = 10):
         """
         Return similar documents to the query (and the precision and recall if applicable).
-        :param doc_dict: dictionary of documents
-        :param query: query
-        :param by_title: if True, the query is a title. Otherwise, the query is a text.
-        :param num_results: number of results to return
-        :return:
+
+        Args:
+            doc_dict (Dict[str, str]): Dictionary of document titles and texts.
+            query (str): Query to find similar documents for.
+            by_title (bool): Whether the query is a title or not.
+            num_results (int): Number of results to return.
+
+        Returns:
+            List of similar document titles, List of similar documents, Precision, Recall
         """
 
         similar_documents_titles, similar_documents = [], []
@@ -24,9 +30,9 @@ class SimpleGUI:
             similar_documents = self.retrieval_system.fast_cosine_score(query_document_split, k=num_results, query_doc_title=query)
             similar_documents_titles = [self.retrieval_system.document_titles[tup[0]] for tup in similar_documents]
         else:
-            query_document = query
+            query_document = self.preprocessor.preprocess_text(query)
             if isinstance(query, str):
-                query = query.split()
+                query = self.preprocessor.preprocess_text(query).split()
             similar_documents = self.retrieval_system.fast_cosine_score(query, k=num_results, query_doc_title=None)
             similar_documents_titles = [self.retrieval_system.document_titles[tup[0]] for tup in similar_documents]
 
@@ -168,7 +174,7 @@ class SimpleGUI:
         if self.current_by_title:
             query = self.doc_dict[self.current_query].split()
         else:
-            query = self.current_query.split()
+            query = self.preprocessor.preprocess_text(self.current_query).split()
 
         # Perform the Rocchio relevance feedback
         updated_top_docs = self.retrieval_system.rocchio_pipeline(list_of_relevant_indices=relevant_indices,
@@ -211,6 +217,7 @@ class SimpleGUI:
 
         self.retrieval_system = retrieval_system
         self.lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
+        self.preprocessor = DataPreprocessor()
 
         self.root = root
         root.title("Similar Documents Retrieval System")

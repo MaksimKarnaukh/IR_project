@@ -1,9 +1,6 @@
 import copy
 
-import numpy as np
-
 from src.inverted_index import SPIMI
-from src.related_doc_retrieval import RelatedDocumentsRetrieval
 from utils import *
 import time
 import variables
@@ -232,70 +229,14 @@ def test_all_with_lucene():
             file.write("\n----------\n")
 
 def test_all():
-    """
-    Test the retrieval system.
-    Print the average precision, recall, F1 score and kappa.
-    """
-    # read the ground truth labels
-    ground_truth_labels: dict = read_gt(variables.filepath_path_gt)
-
-    # read the dictionary of documents
-    doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
-
-    # convert the dictionary of documents to a list of documents and a list of document titles
-    documents = list(doc_dict.values())
-    document_titles = list(doc_dict.keys())
-
-    # initialize the retrieval system
-    retrieval_system = RelatedDocumentsRetrieval(document_titles, documents)
-    retrieval_system.initialize_tf_idf_matrix(documents)
-
-    # initialize the retrieval system with scikit-learn
-    retrieval_system_scipi = RelatedDocumentsRetrieval(document_titles, documents, use_own_vectorizer=False,
-                                                       use_own_cosine_similarity=False)
-    retrieval_system_scipi.initialize_tf_idf_matrix(documents)
-
-    # test the retrieval systems
-    for retrievalsystem in [retrieval_system, retrieval_system_scipi]:
-        # initialize the metrics
-        metrics = {"precisions": [], "recalls": [], "kappas": []}
-        # loop over the ground truth labels
-        for title, similar_documents_gt in ground_truth_labels.items():
-            # retrieve similar documents
-            query_document = doc_dict[title]
-            similar_documents_titles, similar_documents, scores = retrievalsystem.retrieve_similar_documents(query_document, title, 10)
-
-            # calculate the metrics
-            score_dict = dict(zip(similar_documents_titles, scores))
-            par = calculate_precision(similar_documents_gt, similar_documents_titles), calculate_recall(similar_documents_gt, similar_documents_titles)
-            # add the metrics to the dictionary
-            metrics["precisions"].append(par[0])
-            metrics["recalls"].append(par[1])
-
-            # calculate the F1 score
-            # F1 = calculateF1score(par[0], par[1])
-            # add the F1 score to the dictionary
-            # metrics["F1 scores"].append(F1)
-
-            # calculate the kappa
-            ones = [1] * len(similar_documents_gt)
-            scored_gt = dict(zip(similar_documents_gt, ones))
-            kappa = calculateKappa(scored_gt, score_dict, nr_of_docs=len(documents))
-            # add the kappa to the dictionary
-            metrics["kappas"].append(kappa)
-
-        # print the metrics
-        print('\n')
-        print("Average precision: ", sum(metrics["precisions"])/len(metrics["precisions"]))
-        print("Average recall: ", sum(metrics["recalls"])/len(metrics["recalls"]))
-        print("Average F1 score: ", sum(metrics["F1 scores"])/len(metrics["F1 scores"]))
-        print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
+    pass
 
 
 if __name__ == '__main__':
-    # calculateIntraListSimilarity([1, 2, 3], [1, 2, 3])
 
-    # test the retrieval system
+    ### test the retrieval system ###
+
+    # compare with ground truths
     # test_all()
 
     # compare with lucene

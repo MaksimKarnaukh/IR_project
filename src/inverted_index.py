@@ -8,8 +8,6 @@ import time
 from src import variables
 from typing import List, Tuple, Dict, BinaryIO, Generator, Any
 
-from src.utils import getDocDict
-
 DEFAULT_BLOCK_SIZE_LIMIT = 10000
 
 class SPIMI:
@@ -26,33 +24,54 @@ class SPIMI:
         doc_lengths (Dict[int, int]): Dictionary of document lengths.
         doc_count (int): Total number of documents.
         idf_values (Dict[str, float]): Dictionary of IDF values for terms.
+        inv_index_in_mem (Dict[str, Dict[int, float]]): In-memory inverted index
+        documents (List[str]): List of documents.
+        document_titles (List[str]): List of document titles.
+        doc_lengths_n (Dict[int, float]): Normalized document lengths.
+        previous_rocchio_iteration_query (Dict[str, float]): Previous Rocchio iteration query vector.
 
     Args:
         block_size_limit (int): Maximum number of tokens in a block before writing to disk.
         output_dir (str): Directory where the index file(s) will be stored.
+        force_reindex (bool): Indicates if the index should be rebuilt from scratch.
+        documents (list): A list of documents (strings).
+        document_titles (list): A list of document titles.
 
     methods:
-        write_index_entry(self, term: str, postings: Dict[int, int], f: BinaryIO)
-        write_block_to_disk(self)
-        read_next_term_postings(self, f)
-        merge_two_blocks(self, block_file1, block_file2, is_last_merge=False)
-        merge_blocks(self, block_files, delete_merged_blocks=True)
-        spimi_invert(self, token_stream)
-        get_posting_list(self, term)
-        save_term_positions(self)
-        load_term_positions(self)
-        compute_idf(self, term)
-        compute_tf(self, term, doc_id)
-        fast_cosine_score(self, query_terms, K=10)
+        create_index(documents: List[str] | Generator[str, Any, None]) -> None : Create the inverted index from a list of documents.
+        write_index_entry(term: str, postings: Dict[int, int], f: BinaryIO) -> None : Write a term and its postings list to a file.
+        write_block_to_disk(is_single_index_file: bool = False) -> str : Write the current in-memory term dictionary to a block file on disk.
+        read_next_term_postings(f: BinaryIO) -> Tuple[str | None, Dict[int, int] | None] : Read the next term and its postings list from a block file.
+        merge_two_blocks(block_file1: str, block_file2: str, is_last_merge: bool = False) -> str : Merge two block files into a single block file.
+        merge_blocks(block_files: List[str], delete_merged_blocks: bool = True) -> str : Iteratively merge all block files into a final index.
+        spimi_invert(token_stream: List[Tuple[str, int]] | Generator[tuple[Any, int], Any, None]) -> str : Perform SPIMI inversion on a token stream to create an inverted index.
+        calculate_document_lengths() : Calculate the length of each document vector and store it in self.doc_lengths.
+        get_posting_list(term: str) -> Dict[int, int] | None : Retrieve the posting list for a given term.
+        save_index_data() : Save index data to disk.
+        load_index_data() : Load index data from disk.
+        save_mapping(dictionary: Dict[Any, Any], file_name: str) : Save mapping to disk.
+        load_mapping(file_name: str) : Load term positions from disk.
+        compute_idf(num_occurrences) : Compute the Inverse Document Frequency (IDF) for a term.
+        compute_tf(term_count) : Compute the Log Term Frequency for a term.
+        compute_document_tfidf(document_as_list: List[str]) -> Dict[str, float] : Compute the TF-IDF scores for a document.
+        remove_query_title_from_results(query_title: str, num_results: int, similar_documents_sorted: List[Tuple[int, float]]) -> List[Tuple[int, float] | None] : Remove the query document from the list of most similar documents.
+        fast_cosine_score(query_terms: List[str] | Dict[str, float], k: int = 10, query_doc_title: str | None = None) : Compute the top K documents for a query using cosine similarity.
+        rocchio_update(query_vector: Dict[str, float], relevant_docs: List[Dict[str, float]], non_relevant_docs: List[Dict[str, float]], alpha: float = 1.0, beta: float = 0.75, gamma: float = 0.25) -> Dict[str, float] : Update the query vector using the Rocchio algorithm.
+        mark_as_relevant(list_of_relevant_indices: List[int], top_k_docs: List[Tuple[int, float]]) -> Tuple[List[int], List[int]] : Mark the relevant documents from the top K documents.
+        compute_tfidf_scores_for_doc_list(doc_list: List[int], documents: List[str]) -> List[Dict[str, float]] : Compute the TF-IDF scores for a list of documents.
+        rocchio_pipeline(list_of_relevant_indices: List[int], top_docs: List[Tuple[int, float]], query: List[str], query_title: str, first_rocchio: bool = False) -> List[Tuple[int, float]] : Perform the Rocchio algorithm pipeline to update the query vector and the top documents.
     """
 
-    def __init__(self, block_size_limit: int = DEFAULT_BLOCK_SIZE_LIMIT, output_dir: str = variables.inverted_index_folder, force_reindex=False, documents=None, document_titles=None):
+    def __init__(self, block_size_limit: int = DEFAULT_BLOCK_SIZE_LIMIT, output_dir: str = variables.inverted_index_folder, force_reindex: bool = False, documents: List[str] | None = None, document_titles: List[str] | None = None):
         """
         Initialize the SPIMI (Single-Pass In-Memory Indexing) instance.
 
         Args:
             block_size_limit (int): Maximum number of tokens in a block before writing to disk.
             output_dir (str): Directory where the index file(s) will be stored.
+            force_reindex (bool): Indicates if the index should be rebuilt from scratch.
+            documents (list): A list of documents (strings).
+            document_titles (list): A list of document titles.
         """
         self.block_size_limit: int = block_size_limit
         self.output_dir: str = output_dir
@@ -84,18 +103,25 @@ class SPIMI:
 
         self.documents = documents
         self.document_titles = document_titles
-        self.previous_rocchio_iteration_query = None
+        self.previous_rocchio_iteration_query = None # needed for rocchio pipeline function, to keep track of the previous rocchio iteration query
 
-    def create_index(self, documents: List[str] | Generator[str, Any, None]):
+    def create_index(self, documents: List[str] | Generator[str, Any, None]) -> None:
+        """
+        Create the inverted index from a list of documents.
+
+        Args:
+            documents (list): A list of documents (strings).
+        """
         start_time = time.time()
-        token_stream_ = generate_token_stream(documents)
+        token_stream_ = self.generate_token_stream(documents)
         print(f"Token stream generated in: {time.time() - start_time:.4f} seconds")
         start_time = time.time()
         final_index_filename_ = self.spimi_invert(token_stream_)
         print(f"Index creation (SPIMI invert) completed in: {time.time() - start_time:.4f} seconds")
-        print(f"Final index written to: {final_index_filename_}")
+        print(f"Final index written to: {final_index_filename_}\n")
 
-    def write_index_entry(self, term: str, postings: Dict[int, float], f: BinaryIO):
+    @staticmethod
+    def write_index_entry(term: str, postings: Dict[int, float], f: BinaryIO) -> None:
         """
         Write a term and its postings list to a file.
 
@@ -118,6 +144,9 @@ class SPIMI:
         """
         Write the current in-memory term dictionary to a block file on disk.
 
+        Args:
+            is_single_index_file (bool): Indicates if there is only one index file (no merging).
+
         Returns:
             str: The filename of the block file.
         """
@@ -125,7 +154,7 @@ class SPIMI:
         with open(block_filename, 'wb') as f:
             sorted_terms = sorted(self.dictionary.items())
             for term, postings in sorted_terms:
-                if is_single_index_file:
+                if is_single_index_file: # if we have only one index file, and we will not merge, we need to update all necessary variables here
                     for doc_id, tf in postings.items():
                         postings[doc_id] = self.compute_tf(tf)
                     self.term_positions[term] = f.tell()
@@ -134,11 +163,12 @@ class SPIMI:
                 self.write_index_entry(term, postings, f)
 
         self.block_num += 1
-        self.dictionary = dict()
+        self.dictionary = dict() # important to reset the dictionary after writing to disk, for the spimi_invert function to work correctly
         self.token_count = 0
         return block_filename
 
-    def read_next_term_postings(self, f: BinaryIO) -> Tuple[str | None, Dict[int, int] | None]:
+    @staticmethod
+    def read_next_term_postings(f: BinaryIO) -> Tuple[str | None, Dict[int, int] | None]:
         """
         Read the next term and its postings list from a block file.
 
@@ -152,10 +182,10 @@ class SPIMI:
         term_length_data = f.read(4)
         if not term_length_data:
             return None, None
-        term_length = struct.unpack('I', term_length_data)[0]
-        term = f.read(term_length).decode('utf-8')
-        postings_length = struct.unpack('I', f.read(4))[0]
-        postings = pickle.loads(f.read(postings_length))
+        term_length: int = struct.unpack('I', term_length_data)[0]
+        term: str = f.read(term_length).decode('utf-8')
+        postings_length: int = struct.unpack('I', f.read(4))[0]
+        postings: Dict[int, int] = pickle.loads(f.read(postings_length))
         return term, postings
 
     def merge_two_blocks(self, block_file1: str, block_file2: str, is_last_merge: bool = False) -> str:
@@ -191,7 +221,7 @@ class SPIMI:
                     term2, postings2 = self.read_next_term_postings(f2)
                 elif term1 is not None and term2 is not None and term1 == term2: # term1 == term2
                     current_term = term1
-                    current_postings = merge_dicts(postings1, postings2)
+                    current_postings = self.merge_dicts(postings1, postings2)
                     term1, postings1 = self.read_next_term_postings(f1)
                     term2, postings2 = self.read_next_term_postings(f2)
 
@@ -223,7 +253,7 @@ class SPIMI:
             str: The filename of the final merged index.
         """
         while len(block_files) > 1:
-            new_block_files: List[str] = []
+            new_block_files: List[str] = [] # list of filenames of the new blocks
 
             for i in range(0, len(block_files), 2):
                 if i + 1 < len(block_files):
@@ -258,7 +288,7 @@ class SPIMI:
             self.doc_count = max(self.doc_count, doc_id + 1) # ¯\_(ツ)_/¯
             if term not in self.dictionary:
 
-                if self.token_count + 1 > self.block_size_limit:
+                if self.token_count + 1 > self.block_size_limit: # if the block size limit is reached, write the block to disk
                     block_files.append(self.write_block_to_disk())
 
                 self.dictionary[term] = dict()
@@ -284,6 +314,9 @@ class SPIMI:
         """
         Calculate the length of each document vector and store it in self.doc_lengths.
         This is done after the final index is built.
+
+        The formula for the length of a document vector is:
+        length(d) = sqrt(sum(tfidf^2))
         """
         with open(os.path.join(self.output_dir, 'inverted_index.bin'), 'rb') as f:
             while True:
@@ -295,9 +328,9 @@ class SPIMI:
                 postings_length = struct.unpack('I', f.read(4))[0]
                 postings = pickle.loads(f.read(postings_length))
 
-                idf = self.idf_values[term]
+                idf: float = self.idf_values[term]
                 for doc_id, tf in postings.items():
-                    tfidf = tf * idf
+                    tfidf: float = tf * idf
                     self.doc_lengths_n[doc_id] += tfidf ** 2
 
         for doc_id in self.doc_lengths_n:
@@ -313,19 +346,19 @@ class SPIMI:
         Returns:
             dict: The posting list for the term, or None if the term is not found.
         """
-        # if term in self.term_positions:
-        #     offset = self.term_positions[term]
-        #     block_filename = os.path.join(self.output_dir, 'inverted_index.bin')
-        #     with open(block_filename, 'rb') as f:
-        #         f.seek(offset)
-        #         term_length = struct.unpack('I', f.read(4))[0]
-        #         f.read(term_length)  # Skip term
-        #         postings_length = struct.unpack('I', f.read(4))[0]
-        #         postings = pickle.loads(f.read(postings_length))
-        #         return postings
-        # else:
-        #     return None
-        return self.inv_index_in_mem.get(term, None)
+        if term in self.term_positions:
+            offset = self.term_positions[term]
+            block_filename = os.path.join(self.output_dir, 'inverted_index.bin')
+            with open(block_filename, 'rb') as f:
+                f.seek(offset)
+                term_length = struct.unpack('I', f.read(4))[0]
+                f.read(term_length)  # Skip term
+                postings_length = struct.unpack('I', f.read(4))[0]
+                postings = pickle.loads(f.read(postings_length))
+                return postings
+        else:
+            return None
+        # return self.inv_index_in_mem.get(term, None) # use this for test.py evaluation
 
     def save_index_data(self):
         """
@@ -374,12 +407,39 @@ class SPIMI:
             print(f"Error loading mapping from disk: {e}")
 
     def compute_idf(self, num_occurrences):
+        """
+        Compute the Inverse Document Frequency (IDF) for a term.
+
+        Args:
+            num_occurrences (int): The number of documents in which the term occurs.
+
+        Returns:
+            float: The IDF value for the term.
+        """
         return math.log(self.doc_count / num_occurrences, 10)
 
     def compute_tf(self, term_count):
+        """
+        Compute the Log Term Frequency for a term.
+
+        Args:
+            term_count (int): The number of times the term occurs in the document.
+
+        Returns:
+            float: The Log Term Frequency value for the term.
+        """
         return 1 + math.log(term_count, 10)
 
-    def compute_document_tfidf(self, document_as_list):
+    def compute_document_tfidf(self, document_as_list: List[str]) -> Dict[str, float]:
+        """
+        Compute the TF-IDF scores for a document. Special function for rocchio pipeline.
+
+        Args:
+            document_as_list (list): A list of terms in the document.
+
+        Returns:
+            dict: A dictionary of terms and their TF-IDF scores.
+        """
         doc_tfidf: Dict[str, float] = {}
 
         for term in list(set(document_as_list)):
@@ -389,10 +449,20 @@ class SPIMI:
 
         return doc_tfidf
 
-    def remove_query_title_from_results(self, query_title, num_results, similar_documents_sorted):
-        num_results_most_similar = []
+    def remove_query_title_from_results(self, query_title: str, num_results: int, similar_documents_sorted: List[Tuple[int, float]]) -> List[Tuple[int, float] | None]:
+        """
+        Remove the query document from the list of most similar documents.
+
+        Args:
+            query_title (str): The title of the query document.
+            num_results (int): The number of top documents to return.
+            similar_documents_sorted (list): A list of tuples (doc_id, score) of the most similar documents.
+
+        Returns:
+            list: A list of tuples (doc_id, score) of the most similar documents, excluding the query document.
+        """
+        num_results_most_similar: List[Tuple[int, float]] = []
         idx = 0
-        # get the most similar documents
         while len(num_results_most_similar) < num_results and idx < len(similar_documents_sorted):
             # if the document is not the query document, add it to the list of most similar documents
             if not self.document_titles[similar_documents_sorted[idx][0]] == query_title:
@@ -400,18 +470,19 @@ class SPIMI:
             idx += 1
         return num_results_most_similar
 
-    def fast_cosine_score(self, query_terms: List[str] | Dict[str, float], k=10, query_doc_title=None):
+    def fast_cosine_score(self, query_terms: List[str] | Dict[str, float], k: int = 10, query_doc_title: str | None = None):
         """
         Compute the top K documents for a query using cosine similarity.
 
         Args:
             query_terms (List[str] | Dict[str, float]): A list of query terms or dictionary of query tf-idf values.
-            K (int): The number of top documents to return.
+            k (int): The number of top documents to return.
+            query_doc_title (str): The title of the query document.
 
         Returns:
             list: A list of tuples (doc_id, score) of the top K documents.
         """
-        scores = defaultdict(float)
+        scores: dict[int, float] = defaultdict(float)
 
         query_tfidf: Dict[str, float] = {}
         if isinstance(query_terms, list):
@@ -434,13 +505,16 @@ class SPIMI:
 
             if postings:
                 for doc_id, tf in postings.items():
-                    w_t_d = tf * idf # tf contains the value 1+log(tf_t,d)
+                    w_t_d = tf * idf # note: 'tf' here contains the value 1+log(tf_t,d)
                     w_t_q = query_tfidf[term]
                     scores[doc_id] += w_t_d * w_t_q # do add Wt,d * Wt,q to Scores[d]
 
         for doc_id in scores:
             scores[doc_id] /= self.doc_lengths_n[doc_id]
 
+        # if the query document title is provided, this means the input query is the text associated with
+        # a document by that title, and we need to remove that document from the results
+        # (because it will always be the most similar document, since it's literally the same document).
         if query_doc_title:
             top_k_docs: List[Tuple[int, float]] = heapq.nlargest(k + 1, scores.items(), key=lambda item: item[1])
             top_k_docs = self.remove_query_title_from_results(query_title=query_doc_title, num_results=k, similar_documents_sorted=top_k_docs)
@@ -450,7 +524,21 @@ class SPIMI:
         return top_k_docs
 
     @staticmethod
-    def rocchio_update(query_vector, relevant_docs, non_relevant_docs, alpha=1, beta=0.75, gamma=0.25):
+    def rocchio_update(query_vector: Dict[str, float], relevant_docs: List[Dict[str, float]], non_relevant_docs: List[Dict[str, float]], alpha: float = 1.0, beta: float = 0.75, gamma: float = 0.25) -> Dict[str, float]:
+        """
+        Update the query vector using the Rocchio algorithm.
+
+        Args:
+            query_vector (dict): The original query vector.
+            relevant_docs (list): A list of relevant documents.
+            non_relevant_docs (list): A list of non-relevant documents.
+            alpha (float): Weight for the original query vector.
+            beta (float): Weight for the relevant documents.
+            gamma (float): Weight for the non-relevant documents.
+
+        Returns:
+            dict: The updated query vector.
+        """
         updated_vector = defaultdict(float)
 
         # Add original query vector
@@ -470,23 +558,55 @@ class SPIMI:
         return updated_vector
 
     @staticmethod
-    def mark_as_relevant(list_of_relevant_indices: list, top_k_docs: list):
+    def mark_as_relevant(list_of_relevant_indices: List[int], top_k_docs: List[Tuple[int, float]]) -> Tuple[List[int], List[int]]:
+        """
+        Mark the relevant documents from the top K documents.
+
+        Args:
+            list_of_relevant_indices (list): A list of relevant document indices.
+            top_k_docs (list): A list of tuples (doc_id, score) of the top K documents.
+
+        Returns:
+            tuple: A tuple containing the relevant and irrelevant document indices.
+        """
         relevant_docs = []
         for idx in list_of_relevant_indices:
-            print(f"Relevant doc: {top_k_docs[idx]}")
             relevant_docs.append(top_k_docs[idx][0])
 
         irrelevant_docs = [doc[0] for doc in top_k_docs if doc not in relevant_docs]
         return relevant_docs, irrelevant_docs
 
-    def compute_tfidf_scores_for_doc_list(self, doc_list: list, documents):
-        tfidf_scores = []
+    def compute_tfidf_scores_for_doc_list(self, doc_list: List[int], documents: List[str]) -> List[Dict[str, float]]:
+        """
+        Compute the TF-IDF scores for a list of documents.
+
+        Args:
+            doc_list (list): A list of document indices.
+            documents (list): A list of documents (strings).
+
+        Returns:
+            list: A list of dictionaries containing the TF-IDF scores for each document.
+        """
+        tfidf_scores: List[Dict[str, float]] = []
         for doc_id in doc_list:
             tfidf_scores.append(self.compute_document_tfidf(documents[doc_id].split()))
 
         return tfidf_scores
 
-    def rocchio_pipeline(self, list_of_relevant_indices, top_docs, query, query_title, first_rocchio=False):
+    def rocchio_pipeline(self, list_of_relevant_indices: List[int], top_docs: List[Tuple[int, float]], query: List[str], query_title: str, first_rocchio: bool = False) -> List[Tuple[int, float]]:
+        """
+        Perform the Rocchio algorithm pipeline to update the query vector and the top documents.
+
+        Args:
+            list_of_relevant_indices (list): A list of relevant document indices.
+            top_docs (list): A list of tuples (doc_id, score) of the top K documents.
+            query (list): The original query terms.
+            query_title (str): The title of the query document.
+            first_rocchio (bool): Indicates if this is the first Rocchio iteration.
+
+        Returns:
+            list: A list of tuples (doc_id, score) of the top documents after Rocchio.
+        """
 
         # obtain doc indices (not cosine score)
         relevant_docs, irrelevant_docs = self.mark_as_relevant(list_of_relevant_indices=list_of_relevant_indices, top_k_docs=top_docs)
@@ -499,56 +619,65 @@ class SPIMI:
             self.previous_rocchio_iteration_query = self.compute_document_tfidf(query)
 
         # apply rocchio
-        rocchio_iteration_query = self.rocchio_update(query_vector=self.previous_rocchio_iteration_query,
+        rocchio_iteration_query: Dict[str, float] = self.rocchio_update(query_vector=self.previous_rocchio_iteration_query,
                                                              relevant_docs=tfidf_relevant_docs,
                                                              non_relevant_docs=tfidf_irrelevant_docs)
 
         self.previous_rocchio_iteration_query = rocchio_iteration_query
 
-        # new_query is now a vector and no longer a list of words (this was needed for rocchio)
+        # rocchio_iteration_query is now a vector and no longer a list of words (this was needed for rocchio)
         top_docs_after_rocchio = self.fast_cosine_score(query_terms=rocchio_iteration_query,
-                                                         query_doc_title=query_title)
+                                                        query_doc_title=query_title,
+                                                        k=len(top_docs))
 
         return top_docs_after_rocchio
 
-def generate_token_stream(documents: List[str] | Generator[str, Any, None]) -> Generator[Tuple[str, int], Any, None]:
+    @staticmethod
+    def generate_token_stream(documents: List[str] | Generator[str, Any, None]) -> Generator[Tuple[str, int], Any, None]:
+        """
+        Generate a stream of (term, doc_id) tuples from a list of documents.
+
+        Args:
+            documents (list): A list of documents (strings).
+
+        Yields:
+            tuple: A tuple (term, doc_id) for each term in each document.
+        """
+        for doc_id, text in enumerate(documents):
+            for term in text.split():
+                yield term, doc_id
+
+    @staticmethod
+    def merge_dicts(c1: Dict[int, int], c2: Dict[int, int]) -> Dict[int, int]:
+        """
+        Merge two dictionaries by adding values of common keys.
+
+        Args:
+            c1 (dict): The first dictionary.
+            c2 (dict): The second dictionary.
+
+        Returns:
+            dict: The merged dictionary.
+        """
+
+        c1 = {k: int(v) for k, v in c1.items()}
+        c2 = {k: int(v) for k, v in c2.items()}
+
+        # using default dict to simplify the addition logic
+        merged_dict = defaultdict(int, c1)
+        for k, v in c2.items():
+            merged_dict[k] += v
+
+        # convert back to a regular dict
+        return dict(merged_dict)
+
+def print_block_file(file_path: str) -> None:
     """
-    Generate a stream of (term, doc_id) tuples from a list of documents.
+    Print the contents of a block file.
 
     Args:
-        documents (list): A list of documents (strings).
-
-    Yields:
-        tuple: A tuple (term, doc_id) for each term in each document.
+        file_path (str): The path to the block file.
     """
-    for doc_id, text in enumerate(documents):
-        for term in text.split():
-            yield term, doc_id
-
-def merge_dicts(c1: Dict[int, int], c2: Dict[int, int]) -> Dict[int, int]:
-    """
-    Merge two dictionaries by adding values of common keys.
-
-    Args:
-        c1 (dict): The first dictionary.
-        c2 (dict): The second dictionary.
-
-    Returns:
-        dict: The merged dictionary.
-    """
-
-    c1 = {k: int(v) for k, v in c1.items()}
-    c2 = {k: int(v) for k, v in c2.items()}
-
-    # using default dict to simplify the addition logic
-    merged_dict = defaultdict(int, c1)
-    for k, v in c2.items():
-        merged_dict[k] += v
-
-    # convert back to a regular dict
-    return dict(merged_dict)
-
-def print_block_file(file_path):
     with open(file_path, 'rb') as f:
         while True:
             term_length_data = f.read(4)
@@ -562,135 +691,3 @@ def print_block_file(file_path):
             print(f"Term: {term}")
             for doc_id, freq in postings.items():
                 print(f"    Doc ID: {doc_id}, Frequency: {freq}")
-
-
-# Example usage
-if __name__ == "__main__":
-    documents = [
-        "then cat inn then hat",
-        "then quick brown fox",
-        "then lazy dog",
-        "then hat sis inn then cat",
-    ]
-    documents = [
-        "car "*27 + "auto "*3 + "insurance "*0 + "best "*14,
-        "car "*4 + "auto "*33 + "insurance "*33 + "best "*0,
-        "car "*24 + "auto "*0 + "insurance "*29 + "best "*17,
-    ]
-
-    start_time = time.time()
-    doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
-    print(f"Got Doc Dict in: {time.time() - start_time:.4f} seconds")
-
-    documents = list(doc_dict.values())
-    document_titles = list(doc_dict.keys())
-    spimi = SPIMI(block_size_limit=10000, force_reindex=False, documents=documents, document_titles=document_titles)
-
-    # put documents[9000] string of words into a list of words
-    query_ = documents[9000].split()
-    query_title = document_titles[9000]
-
-    # query_ = ["mario"]
-    start_time = time.time()
-    top_docs = spimi.fast_cosine_score(query_, k=10, query_doc_title=query_title)
-    print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
-    print(f"\nTop documents for query '{query_title}': {top_docs}")
-
-    for doc in top_docs:
-        print(document_titles[doc[0]])
-
-    """
-    Rocchio:
-    Say for the sake of simplicity, the user likes documents at index 6, 8 and 9
-    Numbers aren't chosen randomly but are rather documents not in the top 5
-    This will challenge rocchio to find documents that are more closely related to the bottom 5 of the top 10
-    """
-
-    # # obtain doc indices (not cosine score)
-    # relevant_docs, irrelevant_docs = spimi.mark_as_relevant(list_of_relevant_indices=[6, 8, 9], top_k_docs=top_docs)
-    #
-    # tfidf_relevant_docs = spimi.compute_tfidf_scores_for_doc_list(doc_list=relevant_docs, documents=documents)
-    # tfidf_irrelevant_docs = spimi.compute_tfidf_scores_for_doc_list(doc_list=irrelevant_docs, documents=documents)
-    #
-    # # relevant docs are expected to be the dictionary for key: term, value: tfidf
-    # original_query_vectorized = spimi.compute_document_tfidf(query_)
-    #
-    # # apply rocchio
-    # first_rocchio_iteration_query = spimi.rocchio_update(query_vector=original_query_vectorized, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
-    #
-    # # new_query is now a vector and no longer a list of words (this was needed for rocchio)
-    # top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=first_rocchio_iteration_query, query_doc_title=query_title)
-
-    top_docs_after_rocchio = spimi.rocchio_pipeline(list_of_relevant_indices=[6, 8, 9], top_docs=top_docs, query=query_, query_title=query_title)
-
-    print("\n-------\nafter rocchio\n-------\n")
-    for doc in top_docs_after_rocchio:
-        print(document_titles[doc[0]])
-
-    """
-    If you now want to do rocchio again, say you select only 1 document, this being document at index 2
-    Repeat the same process but DO NOT vectorize the previous query again. It is already vectorizes
-    This is because in the original fast cosine, you pass a list of words as query
-    In Rocchio, you pass a vector so in the next Rocchio iteration, this will still be a vector
-    """
-
-    # # obtain doc indices (not cosine score)
-    # relevant_docs, irrelevant_docs = spimi.mark_as_relevant(list_of_relevant_indices=[2], top_k_docs=top_docs)
-    #
-    # tfidf_relevant_docs = spimi.compute_tfidf_scores_for_doc_list(doc_list=relevant_docs, documents=documents)
-    # tfidf_irrelevant_docs = spimi.compute_tfidf_scores_for_doc_list(doc_list=irrelevant_docs, documents=documents)
-    #
-    # # DONT DO ANYTHING WITH VECTORIZING
-    # #original_query_vectorized = spimi.compute_document_tfidf(query_)
-    #
-    # # THE NEXT 'query_vector' IS THE PREVIOUS ROCCHIO QUERY WHICH IS CALLED 'new_query_for_rocchio'
-    # previous_query = first_rocchio_iteration_query
-    #
-    # # apply rocchio again
-    # second_rocchio_iteration_query = spimi.rocchio_update(query_vector=previous_query, relevant_docs=tfidf_relevant_docs, non_relevant_docs=tfidf_irrelevant_docs)
-    #
-    # # new_query is now a vector and no longer a list of words (this was needed for rocchio)
-    # top_docs_after_rocchio = spimi.fast_cosine_score(query_terms=second_rocchio_iteration_query, query_doc_title=query_title)
-
-    top_docs_after_rocchio = spimi.rocchio_pipeline(list_of_relevant_indices=[2], top_docs=top_docs, query=query_, query_title=query_title)
-
-    print("\n-------\nafter rocchio\n-------\n")
-    for doc in top_docs_after_rocchio:
-        print(document_titles[doc[0]])
-
-    # # print contents of all binary files in the output/spimi_output directory
-    # for file in os.listdir('../output/spimi_output'):
-    #     if file.endswith("index.bin"):
-    #         print("-----\n")
-    #         print("\nfile:", file)
-    #         print_block_file(os.path.join('../output/spimi_output', file))
-    #         print("-----\n")
-    #
-    # # Test retrieving the posting list for a term
-    # term_ = "car"
-    # postings_ = spimi.get_posting_list(term_)
-    # print(f"\nPosting list for term '{term_}': {postings_}")
-    #
-    # # Test saving and loading term positions
-    # spimi.save_mapping(spimi.term_positions, 'term_positions.bin')
-    # spimi.term_positions = spimi.load_mapping('term_positions.bin')
-    # term_ = "auto"
-    # postings_ = spimi.get_posting_list(term_)
-    # print(f"\nPosting list for term '{term_}': {postings_}")
-    # term_ = "insurance"
-    # postings_ = spimi.get_posting_list(term_)
-    # print(f"\nPosting list for term '{term_}': {postings_}")
-    # term_ = "best"
-    # postings_ = spimi.get_posting_list(term_)
-    # print(f"\nPosting list for term '{term_}': {postings_}")
-    # #
-    # # # Perform ranked retrieval with cosine similarity
-    # # query_ = ["then", "cat"]
-    # # top_docs = spimi.fast_cosine_score(query_, K=4)
-    # # print(f"\nTop documents for query '{query_}': {top_docs}")
-    #
-    # query_ = ["best", "auto", "insurance"]
-    # start_time = time.time()
-    # top_docs = spimi.fast_cosine_score(query_, K=10)
-    # print(f"Fast cosine score completed in: {time.time() - start_time:.4f} seconds")
-    # print(f"\nTop documents for query '{query_}': {top_docs}")
