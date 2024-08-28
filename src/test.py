@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 
 from src.inverted_index import SPIMI
@@ -78,7 +80,7 @@ def calculate_average_precision(expected, retrieved, k=0):
 #     return F1_score
 
 
-def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, relevance_threshold=0.7):
+def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, relevance_threshold=0.85):
     """
     kappa >= 2/3 is good
     :param expected_pairs: expected key-val pairs: key=doc_name, val=relevance_score
@@ -88,6 +90,15 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
     :return: kappa value
     """
     relevant_retrieved_pairs = {}
+    old = copy.deepcopy(expected_pairs)
+    expected_pairs = dict()
+    j = 0
+    for k in old.keys():
+        j+=1
+        expected_pairs[k] = old[k]
+        if j > nr_of_docs:
+            break
+    nr_of_docs = len(set(list(expected_pairs.keys()) + list(retrieved_pairs.keys())))
 
     # sort the retrieved pairs by relevance score
     for key in retrieved_pairs.keys():
@@ -117,81 +128,108 @@ def calculateKappa(expected_pairs: dict, retrieved_pairs: dict, nr_of_docs, rele
     Pe = (((r1/nr_of_docs)*(c1/nr_of_docs))+((r2/nr_of_docs)*(c2/nr_of_docs)))
 
     # kappa calculation (by formula)
-    kappa = (P0 - Pe) / (1 - Pe)
+    if 1 - Pe == 0:
+        kappa = 1
+    else:
+        kappa = (P0 - Pe) / (1 - Pe)
+
+    # if kappa > 1:
+    #     # print(expected_pairs)
+    #     #print(Pe)
+    #     if Pe == 2.0:
+    #         b = 2
+    #     a = 2
+    # print(kappa)
 
     return kappa
 
 def test_all_with_lucene():
     from pylucene import PyLuceneWrapper
-    RELEVANT_NR_DOCS_LUCENE = 20
+    all_metrics = []
 
     doc_dict = getDocDict(filepath_video_games=variables.filepath_video_games, csv_doc_dict=variables.csv_doc_dict)
     lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
-    retrievalsystem = SPIMI(block_size_limit=10000, force_reindex=True, documents=list(doc_dict.values()), document_titles=list(doc_dict.keys()))
-    # start timer
-    start = time.time()
-    ks = [3,5,10]
-    metrics = {"precisions@": {}, "recalls@": {}, "kappas@": {}}
-    for k in ks:
-        metrics[f"precisions@"][k] = []
-        metrics[f"recalls@"][k] = []
-        metrics[f"kappas@"][k] = []
+    retrievalsystem = SPIMI(block_size_limit=10000, force_reindex=True, documents=list(doc_dict.values()),
+                            document_titles=list(doc_dict.keys()))
 
-    print("Start comparing with lucene")
-    # loop over all the documents
-    doc_nr = 0
-    document_titles = list(doc_dict.keys())
-    for title, text in doc_dict.items():
+    for RELEVANT_NR_DOCS_LUCENE in [10, 20]:
+        # RELEVANT_NR_DOCS_LUCENE = 20
 
-        if doc_nr % 100 == 0 and doc_nr != 0:
-            print(f"Document nr: {doc_nr} /", len(doc_dict))
-            average_time = (time.time() - start) / (doc_nr+1)
-            print(f"Average time per document: {average_time}")
-            docs_left = len(doc_dict) - doc_nr
-            print(f"Time left: {average_time * docs_left}")
-            print(f"Average precision@3: {sum(metrics['precisions@'][3]) / len(metrics['precisions@'][3])}")
-            print(f"Average kappa@3: {sum(metrics['kappas@'][3]) / len(metrics['kappas@'][3])}")
-            print(f"Average kappa@5: {sum(metrics['kappas@'][5]) / len(metrics['kappas@'][5])}")
-            print(f"Average kappa@10: {sum(metrics['kappas@'][10]) / len(metrics['kappas@'][10])}")
-        doc_nr += 1
-        start_time_ = time.time()
-        # get the similar documents from the retrieval system
-        similar_documents = retrievalsystem.fast_cosine_score(text.split(), k=10)
-        similar_documents_titles = [(document_titles[tup[0]], tup[1]) for tup in similar_documents]
-
-        # print(f"Retrieval system time: {time.time() - start_time_}")
-        # get the similar documents from the lucene system
-        # start_time_lucene = time.time()
-        similar_documents_lucene = lucene_retrieval_system.search_index(text, RELEVANT_NR_DOCS_LUCENE)
-        # print(f"Lucene time: {time.time() - start_time_lucene}")
-
-        expected = [tup[0] for tup in similar_documents_lucene]
-        expected_dict = dict(similar_documents_lucene)
-        retrieved = [tup[0] for tup in similar_documents_titles]
-        retrieved_dict = dict(similar_documents_titles)
-
-        # calculate the metrics
+        # start timer
+        start = time.time()
+        ks = [3,5,10]
+        metrics = {"precisions@": {}, "recalls@": {}, "kappas@": {}}
         for k in ks:
-            precision = calculate_average_precision(expected=expected, retrieved=retrieved, k=k)
-            recall = calculate_recall(expected=expected, retrieved=retrieved, k=k)
-            kappa = calculateKappa(expected_pairs=expected_dict, retrieved_pairs=retrieved_dict, nr_of_docs=k)
+            metrics[f"precisions@"][k] = []
+            metrics[f"recalls@"][k] = []
+            metrics[f"kappas@"][k] = []
 
-            metrics[f"precisions@"][k].append(precision)
-            metrics[f"recalls@"][k].append(recall)
-            metrics[f"kappas@"][k].append(kappa)
-    print('\n')
-    for k in ks:
-        print(f"Mean Average precision@{k}: ", sum(metrics["precisions@"][k])/len(metrics["precisions@"][k]))
-        print(f"Average recall@{k}: ", sum(metrics["recalls@"][k])/len(metrics["recalls@"][k]))
+        print("Start comparing with lucene")
+        # loop over all the documents
+        doc_nr = 0
+        document_titles = list(doc_dict.keys())
+        for title, text in doc_dict.items():
+
+            if doc_nr % 100 == 0 and doc_nr != 0:
+                print(f"Document nr: {doc_nr} /", len(doc_dict))
+                average_time = (time.time() - start) / (doc_nr+1)
+                print(f"Average time per document: {average_time}")
+                docs_left = len(doc_dict) - doc_nr
+                print(f"Time left: {average_time * docs_left}")
+            #     print(f"Average precision@3: {sum(metrics['precisions@'][3]) / len(metrics['precisions@'][3])}")
+            #     print(f"Average precision@5: {sum(metrics['precisions@'][5]) / len(metrics['precisions@'][5])}")
+            #     print(f"Average precision@10: {sum(metrics['precisions@'][10]) / len(metrics['precisions@'][10])}")
+            #     print(f"Average recall@3: {sum(metrics['recalls@'][3]) / len(metrics['recalls@'][3])}")
+            #     print(f"Average recall@5: {sum(metrics['recalls@'][5]) / len(metrics['recalls@'][5])}")
+            #     print(f"Average recall@10: {sum(metrics['recalls@'][10]) / len(metrics['recalls@'][10])}")
+            #     print(f"Average kappa@3: {sum(metrics['kappas@'][3]) / len(metrics['kappas@'][3])}")
+            #     print(f"Average kappa@5: {sum(metrics['kappas@'][5]) / len(metrics['kappas@'][5])}")
+            #     print(f"Average kappa@10: {sum(metrics['kappas@'][10]) / len(metrics['kappas@'][10])}")
+            doc_nr += 1
+            start_time_ = time.time()
+            # get the similar documents from the retrieval system
+            similar_documents = retrievalsystem.fast_cosine_score(text.split(), k=10)
+            similar_documents_titles = [(document_titles[tup[0]], tup[1]) for tup in similar_documents]
+
+            # print(f"Retrieval system time: {time.time() - start_time_}")
+            # get the similar documents from the lucene system
+            # start_time_lucene = time.time()
+            similar_documents_lucene = lucene_retrieval_system.search_index(text, RELEVANT_NR_DOCS_LUCENE)
+            # print(f"Lucene time: {time.time() - start_time_lucene}")
+
+            expected = [tup[0] for tup in similar_documents_lucene]
+            expected_dict = dict(similar_documents_lucene)
+            retrieved = [tup[0] for tup in similar_documents_titles]
+            retrieved_dict = dict(similar_documents_titles)
+
+            # calculate the metrics
+            for k in ks:
+                precision = calculate_average_precision(expected=expected, retrieved=retrieved, k=k)
+                recall = calculate_recall(expected=expected, retrieved=retrieved, k=k)
+                kappa = calculateKappa(expected_pairs=expected_dict, retrieved_pairs=retrieved_dict, nr_of_docs=k)
+
+                metrics[f"precisions@"][k].append(precision)
+                metrics[f"recalls@"][k].append(recall)
+                metrics[f"kappas@"][k].append(kappa)
+
+        print('\n')
+        for k in ks:
+            print(f"Mean Average precision@{k}: ", sum(metrics["precisions@"][k])/len(metrics["precisions@"][k]))
+            print(f"Average recall@{k}: ", sum(metrics["recalls@"][k])/len(metrics["recalls@"][k]))
+            print(f"Average kappa@{k}: ", sum(metrics["kappas@"][k]) / len(metrics["kappas@"][k]))
+
+        all_metrics.append(metrics)
 
     # print("Average kappa: ", sum(metrics["kappas"]) / len(metrics["kappas"]))
 
-    # write the metrics to a file
+        # write the metrics to a file
     with open(variables.metrics_output_file, "w") as file:
-        for k in ks:
-            file.write(f"Mean Average precision@{k}: {sum(metrics['precisions@'][k])/len(metrics['precisions@'][k])}\n")
-            file.write(f"Average recall@{k}: {sum(metrics['recalls@'][k])/len(metrics['recalls@'][k])}\n")
-        # file.write(f"Average kappa: {sum(metrics['kappas']) / len(metrics['kappas'])}\n")
+        for metric in all_metrics:
+            for k in ks:
+                file.write(f"Mean Average precision@{k}: {sum(metric['precisions@'][k])/len(metric['precisions@'][k])}\n")
+                file.write(f"Average recall@{k}: {sum(metric['recalls@'][k])/len(metric['recalls@'][k])}\n")
+                file.write(f"Average kappa@{k}: {sum(metric['kappas@'][k])/len(metric['kappas@'][k])}\n")
+            file.write("\n----------\n")
 
 def test_all():
     """
