@@ -1,12 +1,26 @@
-import copy
+"""
+This file contains the evaluation functions for the retrieval system.
+"""
 
+import copy
+import numpy as np
 from src.inverted_index import SPIMI
 from utils import *
 import time
 import variables
 
 
-def calculate_confusion_matrix(expected, retrieved):
+def calculate_confusion_matrix(expected: list, retrieved: list) -> tuple:
+    """
+    Calculate the confusion matrix.
+
+    Args:
+        expected (list): list of expected values (ground truth labels)
+        retrieved (list): list of retrieved values (our algorithm)
+
+    Returns:
+        tuple: (TP, FP, FN)
+    """
     # number of retrieved values that are also in expected (True positive)
     TP = len([ret for ret in retrieved if ret in expected])
     # number of retrieved values that aren't in expected (False positive)
@@ -16,14 +30,17 @@ def calculate_confusion_matrix(expected, retrieved):
 
     return TP, FP, FN
 
-
 def calculate_precision(expected, retrieved, k=0) -> float:
     """
     • P(recision) = TP/(TP+FP) how much correct of found
-    :param expected: list of expected values (ground truth labels)
-    :param retrieved: list of retrieved values (our algorithm)
-    :param k: cut-off value (top k retrieved values)
-    :return: tuple(precision, recall)
+
+    Args:
+        expected (list): list of expected values (ground truth labels)
+        retrieved (list): list of retrieved values (our algorithm)
+        k (int): cut-off value (top k retrieved values)
+
+    Returns:
+        float: precision
     """
     if k != 0:
         retrieved = retrieved[:k]
@@ -33,7 +50,6 @@ def calculate_precision(expected, retrieved, k=0) -> float:
     precision = TP / (TP + FP) if TP + FP != 0 else 0
 
     return precision
-
 
 def calculate_recall(expected, retrieved, k=0):
     """
@@ -325,8 +341,6 @@ def test_all():
         similar_documents_lucene = lucene_retrieval_system.search_index(text, 10)
         # print(f"Lucene time: {time.time() - start_time_lucene}")
 
-
-
         retrieved_lucene = [tup[0] for tup in similar_documents_lucene]
         retrieved_lucene_dict = dict(similar_documents_lucene)
         retrieved = [tup[0] for tup in similar_documents_titles]
@@ -342,7 +356,6 @@ def test_all():
             precision_lucene = calculate_average_precision(expected=similar_documents_gt, retrieved=retrieved_lucene, k=k)
             recall_lucene = calculate_recall(expected=similar_documents_gt, retrieved=retrieved_lucene, k=k)
             kappa_lucene = calculateKappa(expected_pairs=similar_documents_gt_dict, retrieved_pairs=retrieved_lucene_dict, nr_of_docs=k)
-
 
             metrics["spimi"][f"precisions@"][k].append(precision_rerieval)
             metrics["spimi"][f"recalls@"][k].append(recall_rerieval)

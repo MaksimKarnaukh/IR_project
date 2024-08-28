@@ -496,6 +496,8 @@ class SPIMI:
 
         # normalize the query vector
         query_length = math.sqrt(sum([v**2 for v in query_tfidf.values()]))
+        if query_length == 0:
+            return []
         for term in query_tfidf:
             query_tfidf[term] /= query_length
 
