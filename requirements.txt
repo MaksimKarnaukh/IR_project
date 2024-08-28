@@ -4,4 +4,4 @@ scikit-learn
 pandas
 IPython
 scipy==1.11.4
-
+matplotlib
