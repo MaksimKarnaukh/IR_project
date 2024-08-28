@@ -9,10 +9,6 @@ from alive_progress import alive_it
 import pandas as pd
 import csv
 import gzip
-from scipy.sparse import csr_matrix
-import scipy.sparse
-from scipy import sparse
-
 from src import variables
 
 
@@ -189,27 +185,3 @@ def read_dict_from_csv(csvfile, columns):
     :return: dictionary
     """
     return {row[columns[0]]:row[columns[1]] for row in csv.DictReader(csvfile)}
-
-def store_tfidf_matrix(_tfidf_matrix):
-    """
-    Store the TF-IDF matrix to file.
-    """
-    # export the matrix to a npz file
-    _tfidf_matrix: scipy.sparse
-    # scipy.sparse.save_npz()
-    # self._tfidf_matrix.save_npz(variables.tfidf_matrix_csv_path, format="csr")
-    # dense_array = self._tfidf_matrix.toarray()
-    # df = pd.DataFrame(dense_array)
-    # df.to_csv(variables.tfidf_matrix_csv_path, index=False)
-    sparse.save_npz(variables.tfidf_matrix_csv_path, _tfidf_matrix, compressed=False)
-
-def load_tfidf_matrix():
-    """
-    Load the TF-IDF matrix from file to a csr_matrix.
-    :return: TF-IDF matrix
-    """
-    # import the matrix from npz file
-
-    # tfidf_matrix: csr_matrix = scipy.sparse.load_npz(variables.tfidf_matrix_csv_path)
-    _tfidf_matrix: csr_matrix = sparse.load_npz(variables.tfidf_matrix_csv_path)
-    return _tfidf_matrix

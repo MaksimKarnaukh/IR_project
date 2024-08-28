@@ -1,14 +1,26 @@
+"""
+This file contains the evaluation functions for the retrieval system.
+"""
+
 import copy
-
 import numpy as np
-
 from src.inverted_index import SPIMI
 from utils import *
 import time
 import variables
 
 
-def calculate_confusion_matrix(expected, retrieved):
+def calculate_confusion_matrix(expected: list, retrieved: list) -> tuple:
+    """
+    Calculate the confusion matrix.
+
+    Args:
+        expected (list): list of expected values (ground truth labels)
+        retrieved (list): list of retrieved values (our algorithm)
+
+    Returns:
+        tuple: (TP, FP, FN)
+    """
     # number of retrieved values that are also in expected (True positive)
     TP = len([ret for ret in retrieved if ret in expected])
     # number of retrieved values that aren't in expected (False positive)
@@ -18,14 +30,17 @@ def calculate_confusion_matrix(expected, retrieved):
 
     return TP, FP, FN
 
-
 def calculate_precision(expected, retrieved, k=0) -> float:
     """
     • P(recision) = TP/(TP+FP) how much correct of found
-    :param expected: list of expected values (ground truth labels)
-    :param retrieved: list of retrieved values (our algorithm)
-    :param k: cut-off value (top k retrieved values)
-    :return: tuple(precision, recall)
+
+    Args:
+        expected (list): list of expected values (ground truth labels)
+        retrieved (list): list of retrieved values (our algorithm)
+        k (int): cut-off value (top k retrieved values)
+
+    Returns:
+        float: precision
     """
     if k != 0:
         retrieved = retrieved[:k]

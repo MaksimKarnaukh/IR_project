@@ -5,11 +5,27 @@ from utils import *
 from src import variables
 from pylucene import PyLuceneWrapper
 from data_preprocessor import DataPreprocessor
-from typing import List, Tuple, Dict, BinaryIO, Generator, Any
+from typing import List, Tuple, Dict, Any
 
 class SimpleGUI:
+    """
+    Simple GUI for the similar documents retrieval system.
 
-    def return_similar_documents(self, doc_dict: Dict[str, str], query: str, by_title: bool = False, num_results: int = 10):
+    Attributes:
+        doc_dict (Dict[str, str]): Dictionary of document titles and texts.
+        documents (List[str]): List of document texts.
+        document_titles (List[str]): List of document titles.
+        retrieval_system: The retrieval system to use.
+        lucene_retrieval_system: The PyLucene retrieval system.
+        preprocessor: The data preprocessor.
+        ...
+        current_query: The current query.
+        current_by_title: Whether the current query is a title or not.
+        current_similar_documents: The current similar documents.
+        first_rocchio: The flag for the first Rocchio feedback.
+    """
+
+    def return_similar_documents(self, doc_dict: Dict[str, str], query: str, by_title: bool = False, num_results: int = 10) -> Tuple[List[str], List[str], float, float] | Tuple[List[str], List[str], float, float, float, float]:
         """
         Return similar documents to the query (and the precision and recall if applicable).
 
@@ -40,7 +56,7 @@ class SimpleGUI:
         par_lucene = calculate_precision(expected_lucene, similar_documents_titles), calculate_recall(expected_lucene, similar_documents_titles)
 
         print(f"Expected Lucene: {expected_lucene}")
-        print(f"Own: {similar_documents_titles}")
+        print(f"Retrieved: {similar_documents_titles}")
 
         if by_title:
             title = query
@@ -58,12 +74,13 @@ class SimpleGUI:
 
         return similar_documents_titles, similar_documents, par_lucene[0], par_lucene[1]
 
-    def center_window(self, window_width=1450, window_height=850):
+    def center_window(self, window_width=1450, window_height=850) -> None:
         """
         Center the window on the screen.
-        :param window_width: window width
-        :param window_height: window height
-        :return:
+
+        Args:
+            window_width (int): Width of the window.
+            window_height (int): Height of the window.
         """
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -72,9 +89,19 @@ class SimpleGUI:
         y = (screen_height / 2) - (window_height / 2)
         self.root.geometry('%dx%d+%d+%d' % (window_width, window_height, x, y))
 
-    def process_input(self):
+    def process_input(self) -> None:
+        """
+        Process the input query and display the similar documents.
+        """
 
-        def process_input_option(input_text, by_title: bool):
+        def process_input_option(input_text: str, by_title: bool) -> None:
+            """
+            Process the input text and display the similar documents.
+
+            Args:
+                input_text (str): Input text to process.
+                by_title (bool): Whether the input text is a title or not.
+            """
 
             # check if self.num_results_entry.get() is a number in string format
             num_results = 10
@@ -89,7 +116,7 @@ class SimpleGUI:
                 similar_documents_titles, similar_documents, par0_gt, par1_gt, par0_lucene, par1_lucene = result
 
                 output_text1 = ""
-                output_text2 += f"vs Ground Truths:\n" \
+                output_text2 += f"Results vs Ground Truths:\n" \
                                f"Precision: {par0_gt}\n" \
                                f"Recall: {par1_gt}\n"
 
@@ -104,7 +131,7 @@ class SimpleGUI:
                     output_text1 += f"{i}. {doc}\n"
                     self.add_result_checkbox(doc, i)
 
-            output_text2 += f"\nvs Lucene:\n" \
+            output_text2 += f"Results vs Lucene:\n" \
                             f"Precision: {par0_lucene}\n" \
                             f"Recall: {par1_lucene}\n"
 
@@ -115,29 +142,28 @@ class SimpleGUI:
             self.current_by_title = by_title
             self.current_similar_documents = similar_documents
 
-            print("Current query:", self.current_query, "Current by title:", self.current_by_title, "Current similar documents:", self.current_similar_documents)
-
         selected_option = self.choice_var.get()
 
         self.output_box1.delete(1.0, tk.END)
         self.output_box2.delete(1.0, tk.END)
 
-        self.first_rocchio = True
+        self.first_rocchio = True # Reset the first Rocchio flag if we are processing a new query
 
         if selected_option == "Query Sentence":
-            input_text = self.entry.get()
-            process_input_option(input_text, by_title=False)
+            input_ = self.entry.get()
+            process_input_option(input_, by_title=False)
 
         elif selected_option == "Title":
             selected_title = self.title_combobox.get()
             process_input_option(selected_title, by_title=True)
 
-    def add_result_checkbox(self, doc_title, index):
+    def add_result_checkbox(self, doc_title, index) -> None:
         """
         Add a checkbox for each result document.
-        :param doc_title: Document title to add to the checkbox
-        :param index: The index of the document to position the checkbox in the grid
-        :return:
+
+        Args:
+            doc_title (str): Document title to add to the checkbox.
+            index (int): The index of the document to position the checkbox in the grid.
         """
         var = tk.IntVar()
         column = (index - 1) % 5  # 5 columns
@@ -147,28 +173,22 @@ class SimpleGUI:
         checkbox.grid(row=row, column=column, sticky=tk.W, padx=5, pady=5)
         self.result_checkboxes.append(checkbox)
 
-    def clear_result_checkboxes(self):
+    def clear_result_checkboxes(self) -> None:
         """
         Clear all the checkboxes in the result frame.
-        :return:
         """
         for checkbox in self.result_checkboxes:
             checkbox.grid_forget()
         self.result_checkboxes.clear()
 
-    def mark_as_relevant(self):
+    def mark_as_relevant(self) -> None:
         """
-        Function to handle the "Mark as Relevant" button click.
-        :return: List of selected (relevant) documents
+        Function to handle the "Mark as Relevant" button click. After selecting the relevant documents,
+        the Rocchio relevance feedback is applied and the results are updated.
         """
 
         # Get indices of the selected relevant documents relative to the current displayed list
         relevant_indices = [index for index, checkbox in enumerate(self.result_checkboxes) if checkbox.var.get() == 1]
-
-        print("Relevant indices:", relevant_indices)
-        print("Current query:", self.current_query)
-        print("Current by title:", self.current_by_title)
-        print("Current similar documents:", self.current_similar_documents)
 
         # if by title, we need to equal query to the document text of the selected title
         if self.current_by_title:
@@ -188,11 +208,12 @@ class SimpleGUI:
         # Update the displayed results after Rocchio adjustment
         self.update_results_after_rocchio(updated_top_docs)
 
-    def update_results_after_rocchio(self, top_docs):
+    def update_results_after_rocchio(self, top_docs) -> None:
         """
         Update the result list after applying the Rocchio pipeline.
-        :param top_docs: List of top documents after Rocchio update
-        :return:
+
+        Args:
+            top_docs (List[Tuple[int, float]]): List of top documents after Rocchio feedback.
         """
         self.clear_result_checkboxes()
 
@@ -210,18 +231,27 @@ class SimpleGUI:
         self.output_box2.insert(tk.END, "Results updated with Rocchio feedback.\n")
 
     def __init__(self, root, doc_dict, retrieval_system):
+        """
+        Initialize the GUI.
+
+        Args:
+            root: The root window.
+            doc_dict: Dictionary of document titles and texts.
+            retrieval_system: The retrieval system to use.
+        """
 
         self.doc_dict = doc_dict
         self.documents = list(doc_dict.values())
         self.document_titles = list(doc_dict.keys())
 
-        self.retrieval_system = retrieval_system
-        self.lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
+        self.retrieval_system = retrieval_system # our retrieval system using SPIMI
+        self.lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict) # PyLucene retrieval system
         self.preprocessor = DataPreprocessor()
 
         self.root = root
         root.title("Similar Documents Retrieval System")
 
+        # four variables to keep track of the current state of the GUI for the Rocchio relevance feedback pipeline
         self.current_query = None
         self.current_by_title = None
         self.current_similar_documents = []
