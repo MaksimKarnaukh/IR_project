@@ -1,5 +1,7 @@
 import copy
 
+import numpy as np
+
 from src.inverted_index import SPIMI
 from utils import *
 import time
@@ -246,6 +248,8 @@ def plot_metrics(metrics, ks):
             plt.legend()
             plt.title(f"{group} metrics for k={k}")
             plt.savefig(f"{variables.metric_plot_path}metrics_{group}_{k}.png")
+            # close the plot
+            plt.close()
     system_retrieval_names = [group['retrieval_system_name'] for group in metrics.values()]
     for k in ks:
         x = np.arange(len(system_retrieval_names))  # the label locations
@@ -262,18 +266,29 @@ def plot_metrics(metrics, ks):
             entries[f"Mean Average precision@{k}"].append(metrics[group][f"Mean Average precision@{k}"])
             entries[f"Average recall@{k}"].append(metrics[group][f"Average recall@{k}"])
             entries[f"Average kappa@{k}"].append(metrics[group][f"Average kappa@{k}"])
-
+        colors = ['blue', 'orange', 'grey']
         for attribute, measurement in entries.items():
             offset = width * multiplier
-            rects = ax.bar(x + offset, measurement, width, label=attribute)
-            ax.bar_label(rects, padding=3)
+            rects = ax.bar(x + offset, measurement, width, label=attribute, color=colors[multiplier])
+            # only print two decimals
+            ax.bar_label(rects, padding=3, fontsize=12, fmt='%.2f')
+
             multiplier += 1
-        plt.title(f"Average metrics for k={k}")
-        ax.set_ylabel('Score')
+        # horizontal gridlines
+        ax.yaxis.grid(True)
+        plt.title(f"Average metrics against ground truths", fontsize=16)
+        # make all fonts bigger
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        # y-axis label fontsize
+        plt.ylabel('Score', fontsize=14)
+
+
+
+
 
         ax.set_xticks(x + width, system_retrieval_names)
-        ax.legend(loc='upper left', ncols=3)
-        plt.legend()
+        ax.legend(fontsize=12)
         plt.savefig(f"{variables.metric_plot_path}metrics_{k}.png")
 
 
@@ -284,7 +299,6 @@ def test_all():
     """
     from pylucene import PyLuceneWrapper
     ks = [3, 5, 10]
-    start = time.time()
 
     # read the ground truth labels
     ground_truth_labels: dict = read_gt(variables.filepath_path_gt)
@@ -294,6 +308,7 @@ def test_all():
     lucene_retrieval_system = PyLuceneWrapper(documents=doc_dict)
     retrievalsystem = SPIMI(block_size_limit=10000, force_reindex=True, documents=list(doc_dict.values()),
                             document_titles=list(doc_dict.keys()))
+    print("Start comparing with ground truth")
     metrics = {"lucene": initialize_metrics(ks), "spimi": initialize_metrics(ks)}
     metrics["spimi"]["retrieval_system_name"] = "SPIMI"
     metrics["lucene"]["retrieval_system_name"] = "Lucene"
@@ -301,9 +316,10 @@ def test_all():
     # loop over the ground truth labels
     doc_nr = 0
     document_titles = list(doc_dict.keys())
+    start = time.time()
 
     for title, similar_documents_gt in ground_truth_labels.items():
-        if doc_nr % 100 == 0 and doc_nr != 0:
+        if doc_nr % 10 == 0 and doc_nr != 0:
             print(f"Document nr: {doc_nr} /", len(ground_truth_labels))
             average_time = (time.time() - start) / (doc_nr + 1)
             print(f"Average time per document: {average_time}")
